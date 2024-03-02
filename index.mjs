@@ -1,195 +1,248 @@
 // node --watch index.mjs ../../tv2-enps/migration-tv2k-full1.log
 import { pipeline } from 'stream/promises'
 import ndjson from 'ndjson'
-import 'colors'
 import fs from 'node:fs'
-import tty from 'node:tty'
-import YAML from 'yaml'
-import { ZSTDCompress, ZSTDDecompress } from 'simple-zstd'
+import React from 'react'
+import { render, Text, Box, useInput } from 'ink'
+import { formatLevel, formatObject, formatRest, formatTime } from './format.mjs'
 
 let scan = 0
 let update = null
-const cached = []
+let position = 0
+const messages = []
 const matching = []
-const window = { start: 0, length: 20 }
-const filters = [(x) => x.level >= 30]
-
-const input = tty.ReadStream(fs.openSync('/dev/tty', 'r'))
-input
-  .setRawMode(true)
-  .setEncoding('utf8')
-  .on('data', (ch) => {
-    ch = ch + ''
-
-    // console.log('input', Buffer.from(ch))
-
-    switch (ch) {
-      case '\u001b[A': // up
-        window.start--
-        break
-      case '\u001b[B': // down
-        window.start++
-        break
-      case '\u001b[D': // right
-      case '\u001b[C': // left
-        //
-        break
-      case '\n':
-      case '\r':
-      case '\u0004':
-        // Enter
-        break
-      case '\u0008':
-      case '\u007F':
-        // backspace
-        break
-      case '\u0003':
-        // Ctrl-C
-        process.exit()
-        break
-      case '1':
-        filters[0] = (x) => x.level >= 10
-        scan = matching.length = 0
-        break
-      case '2':
-        filters[0] = (x) => x.level >= 20
-        scan = matching.length = 0
-        break
-      case '3':
-        filters[0] = (x) => x.level >= 30
-        scan = matching.length = 0
-        break
-      case '4':
-        filters[0] = (x) => x.level >= 40
-        scan = matching.length = 0
-        break
-      case '5':
-        filters[0] = (x) => x.level >= 50
-        scan = matching.length = 0
-        break
-      case '6':
-        filters[0] = (x) => x.level >= 60
-        scan = matching.length = 0
-        break
-      case '-': {
-        const { msg } = cached[matching.at(window.start)] || {}
-        if (msg) {
-          filters.push((x) => x.msg !== msg)
-          scan = matching.length = 0
-        }
-        break
-      }
-      case '+': {
-        const { msg } = cached[matching.at(window.start)] || {}
-        if (msg) {
-          filters.push((x) => x.msg === msg)
-          scan = matching.length = 0
-        }
-        break
-      }
-      case 'g': {
-        window.start = 0
-        break
-      }
-      case 'G': {
-        window.start = matching.length
-        break
-      }
-      default:
-        console.log('input', ch, Buffer.from(ch))
-        return
-    }
-    update()
-  })
+const filters = [() => true]
 
 function applyFilters(line) {
   return filters.every((fn) => fn(line))
 }
 
-const dtf = new Intl.DateTimeFormat('sv-SE', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  fractionalSecondDigits: 3,
-})
-function formatTime(time) {
-  if (!time) {
-    return '?'
-  }
-  return dtf.format(new Date(time))
-}
-
-function formatLevel(level) {
-  if (level == null || !Number.isFinite(level)) {
-    return '?'
-  }
+function levelProps(level) {
   if (level >= 60) {
-    return 'F'.bgRed
+    return { color: 'red' }
   } else if (level >= 50) {
-    return 'E'.red
+    return { color: 'red' }
   } else if (level >= 40) {
-    return 'W'.yellow
+    return { color: 'yellow' }
   } else if (level >= 30) {
-    return 'I'.blue
+    return { color: 'blue' }
   } else if (level >= 20) {
-    return 'D'
+    return {}
   } else {
-    return 'T'.grey
+    return { dimColor: true }
   }
 }
 
-function formatObject(obj) {
-  return YAML.stringify(obj, { blockQuote: 'literal', aliasDuplicateObjects: false })
+const filterTrace = (x) => x.level >= 10
+filterTrace.label = 'LEVEL>=TRACE'
+const filterDebug = (x) => x.level >= 10
+filterDebug.label = 'LEVEL>=DEBUG'
+const filterInfo = (x) => x.level >= 10
+filterInfo.label = 'LEVEL>=INFO'
+const filterWarning = (x) => x.level >= 10
+filterWarning.label = 'LEVEL>=WARNING'
+const filterError = (x) => x.level >= 10
+filterError.label = 'LEVEL>=ERROR'
+const filterFatal = (x) => x.level >= 10
+filterFatal.label = 'LEVEL>=FATAL'
+
+function Main({ rows, columns }) {
+  const pos = position ?? matching.length - 1
+
+  const [inspect, setInspect] = React.useState()
+
+  const numLines = inspect ? 1 : Math.floor(rows / 2)
+
+  const [key, setKey] = React.useState()
+  useInput((input, key) => {
+    // This is a hack to force refresh...
+    setKey({ input, key })
+
+    // upArrow downArrow leftArrow rightArrow pageDown pageUp return escape ctrl shift tab backspace delete meta
+    if (key.upArrow) {
+      position = Math.max(pos - 1, 0)
+    } else if (key.downArrow) {
+      position = Math.min(pos + 1, matching.length - 1)
+    } else if (key.pageUp) {
+      position = Math.max(pos - numLines, 0)
+    } else if (key.pageDown) {
+      position = Math.min(pos + numLines, matching.length - 1)
+    } else if (key.return) {
+      setInspect(!inspect)
+    } else if (key.delete) {
+      filters.length = 1
+      filters[0] = () => true
+      rescan()
+    }
+
+    switch (input) {
+      case '1':
+        filters[0] = filterTrace
+        rescan()
+        break
+      case '2':
+        filters[0] = filterDebug
+        rescan()
+        break
+      case '3':
+        filters[0] = filterInfo
+        rescan()
+        break
+      case '4':
+        filters[0] = filterWarning
+        rescan()
+        break
+      case '5':
+        filters[0] = filterError
+        rescan()
+        break
+      case '6':
+        filters[0] = filterFatal
+        rescan()
+        break
+      case '-': {
+        const { msg } = messages[matching.at(position)] || {}
+        if (msg) {
+          const fn = (x) => x.msg !== msg
+          fn.label = `msg != "${msg}"`
+          filters.push(fn)
+          rescan()
+        }
+        break
+      }
+      case '+': {
+        const { msg } = messages[matching.at(position)] || {}
+        if (msg) {
+          const fn = (x) => x.msg === msg
+          fn.label = `msg != "${msg}"`
+          filters.push(fn)
+          rescan()
+        }
+        break
+      }
+      case 'g': {
+        position = 0
+        break
+      }
+      case 'F': {
+        position = undefined
+        break
+      }
+      case 'G': {
+        position = matching.length - 1
+        break
+      }
+      case 'q': {
+        process.exit()
+      }
+    }
+  })
+
+  const lines = []
+  const start = Math.max(pos - Math.floor(numLines / 2), -1)
+  for (let linePos = start; linePos < start + numLines; ++linePos) {
+    if (linePos < 0) {
+      if (linePos === -1) {
+        lines.push(<Text color='blue' dimColor>[start of file]</Text>)
+      }
+      continue
+    }
+    if (linePos >= matching.length) {
+      if (linePos === matching.length) {
+        lines.push(<Text color='blue' dimColor>[end of file]</Text>)
+      }
+      continue
+    }
+    const { time, level, msg = '', pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
+    lines.push(
+      <Box flexWrap='nowrap' gap='1'>
+        <Box minWidth={12}>
+          <Text wrap='truncate' dimColor>
+            {formatTime(time)}
+          </Text>
+        </Box>
+        <Box minWidth={7}>
+          <Text wrap='truncate' {...levelProps(level)}>
+            {formatLevel(level)}
+          </Text>
+        </Box>
+        <Box flexShrink={0}>
+          <Text wrap='truncate' color={linePos === pos ? 'inverse' : ''}>
+            {msg}
+          </Text>
+        </Box>
+        <Box flexShrink={100}>
+          <Text wrap='truncate' dimColor>
+            {formatRest(rest)}
+          </Text>
+        </Box>
+      </Box>
+    )
+  }
+  const { time, level, msg, pid, hostname, ...rest } = messages[matching.at(pos)] ?? {}
+
+  return (
+    <Box flexDirection='column' height={rows} width={columns}>
+      <Box gap='1' flexWrap='nowrap'>
+        <Text wrap='truncate-middle'>Position: {matching.at(pos)}</Text>
+        <Text>Matching: {matching.length}</Text>
+        <Text>Scanned: {scan}</Text>
+        <Text>Total: {messages.length}</Text>
+        <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
+      </Box>
+      <Box borderStyle={inspect ? 'single' : 'double'} flexDirection='column' flexWrap='nowrap' height={numLines + 3}>
+        <Box flexWrap='nowrap' gap='1'>
+          <Box width={12}>
+            <Text dimColor>Date</Text>
+          </Box>
+          <Box width={7}>
+            <Text dimColor>Level</Text>
+          </Box>
+          <Text dimColor>Message {filters.map(fn => fn.label ?? fn.toString()).join(' & ')}</Text>
+        </Box>
+        {lines}
+      </Box>
+      <Box borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
+        <Text>{formatObject(rest, { lineWidth: columns - 4 })}</Text>
+      </Box>
+    </Box>
+  )
+}
+
+const enterAltScreenCommand = '\x1b[?1049h'
+const leaveAltScreenCommand = '\x1b[?1049l'
+process.stdout.on('resize', () => {
+  redraw()
+})
+
+let scanToDate
+function rescan() {
+  if (position != null) {
+    scanToDate = new Date(messages[matching.at(position)]?.time)
+  }
+  scan = matching.length = 0
+  position = undefined
+  update()
 }
 
 function redraw() {
-  console.clear()
-  console.log(
-    `${matching.at(window.start)} (${matching.length}/${scan}/${cached.length}) memory ${Math.round(
-      process.memoryUsage().rss / 1e6
-    )} MB`
-  )
-  const start = Math.max(window.start - 10, window.start >= 0 ? 0 : -10000)
-  for (let pos = start; pos < start + window.length; ++pos) {
-    if (!cached[matching.at(pos)]) {
-      console.log('-')
-      continue
-    }
-    const {
-      time = Date.now(),
-      level,
-      msg = '',
-      pid,
-      hostname,
-      ...rest
-    } = cached[matching.at(pos)] || {}
-    const fields = [
-      formatTime(time).dim,
-      formatLevel(level),
-      msg.white,
-      Object.entries(rest)
-        .map(
-          ([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`
-        )
-        .join(' ')
-        .slice(0, 80 - msg.length)
-        .dim,
-    ]
-    console.log(pos === window.start ? fields.join(' ').bgWhite : fields.join(' '))
-  }
-  const { time, level, msg, pid, hostname, ...rest } = cached[matching.at(window.start)] ?? {}
-  console.log('='.repeat(30))
-  console.log(formatObject(rest))
+  render(<Main columns={process.stdout.columns} rows={process.stdout.rows} />)
 }
 
 async function loop() {
   while (true) {
-    while (scan < cached.length) {
-      if (applyFilters(cached[scan])) {
+    const interval = setInterval(() => redraw(), 100)
+    while (scan < messages.length) {
+      if (applyFilters(messages[scan])) {
         matching.push(scan)
+        if (position === undefined && scanToDate && new Date(messages[scan].time) >= scanToDate) {
+          position = matching.length - 1
+          scanToDate = null
+        }
       }
       ++scan
     }
+    clearInterval(interval)
     redraw()
     await new Promise((resolve) => {
       update = resolve
@@ -204,24 +257,15 @@ setInterval(() => {
     update()
     dirty = false
   }
-}, 400)
+}, 100)
 
 await pipeline(
   process.argv.length > 2 ? fs.createReadStream(process.argv.at(-1)) : process.stdin,
-  // ZSTDCompress(3),
-  // async function * (chunks) {
-  //   let buf = Buffer.alloc(0)
-  //   for await (const chunk of chunks) {
-  //     buf = Buffer.concat([buf, chunk])
-  //     yield chunk
-  //   }
-  // },
-  // ZSTDDecompress(),
   ndjson.parse(),
-  async (messages) => {
-    for await (const message of messages) {
-      cached.push(message)
+  async (msgs) => {
+    for await (const msg of msgs) {
+      messages.push(msg)
       dirty = true
     }
   }
-)
+).catch((err) => {})

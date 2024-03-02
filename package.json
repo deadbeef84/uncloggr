@@ -1,13 +1,19 @@
 {
-  "name": "pinoviewer",
+  "name": "pino-tui",
   "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
+  "main": "index.mjs",
+  "scripts": {
+    "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs"
+  },
   "dependencies": {
-    "colors": "^1.4.0",
+    "ink": "^4.4.1",
     "ndjson": "^2.0.0",
-    "simple-zstd": "^1.4.2",
-    "split2": "^4.2.0",
+    "react": "^18.2.0",
     "yaml": "^2.3.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.23.9",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.23.3"
   }
 }
