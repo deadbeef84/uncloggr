@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "main": "index.mjs",
   "scripts": {
+    "build": "babel --keep-file-extension --out-dir dist *.mjs",
     "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs"
   },
   "dependencies": {
     "ink": "^4.4.1",
+    "ink-text-input": "^5.0.1",
     "ndjson": "^2.0.0",
     "react": "^18.2.0",
     "yaml": "^2.3.1"

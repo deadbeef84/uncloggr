@@ -1,6 +1,9 @@
 import YAML from 'yaml'
 
 const dtf = new Intl.DateTimeFormat('sv-SE', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
@@ -43,6 +46,6 @@ export function formatObject(obj, opts) {
 
 export function formatRest(rest) {
   return Object.entries(rest)
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .map(([key, value]) => `${key}:${typeof value === 'string' ? value : JSON.stringify(value)}`)
     .join(' ')
 }

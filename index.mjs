@@ -1,14 +1,17 @@
 // node --watch index.mjs ../../tv2-enps/migration-tv2k-full1.log
-import { pipeline } from 'stream/promises'
+import { pipeline } from 'node:stream/promises'
 import ndjson from 'ndjson'
 import fs from 'node:fs'
+import tty from 'node:tty'
 import React from 'react'
-import { render, Text, Box, useInput } from 'ink'
 import { formatLevel, formatObject, formatRest, formatTime } from './format.mjs'
+import { render, Text, Box, useInput } from 'ink'
+import TextInput from 'ink-text-input'
 
 let scan = 0
 let update = null
 let position = 0
+let status = 'reading file'
 const messages = []
 const matching = []
 const filters = [() => true]
@@ -25,31 +28,38 @@ function levelProps(level) {
   } else if (level >= 40) {
     return { color: 'yellow' }
   } else if (level >= 30) {
-    return { color: 'blue' }
+    return { color: 'green' }
   } else if (level >= 20) {
-    return {}
+    return { color: 'blue' }
   } else {
-    return { dimColor: true }
+    return {}
   }
 }
 
 const filterTrace = (x) => x.level >= 10
 filterTrace.label = 'LEVEL>=TRACE'
-const filterDebug = (x) => x.level >= 10
+const filterDebug = (x) => x.level >= 20
 filterDebug.label = 'LEVEL>=DEBUG'
-const filterInfo = (x) => x.level >= 10
+const filterInfo = (x) => x.level >= 30
 filterInfo.label = 'LEVEL>=INFO'
-const filterWarning = (x) => x.level >= 10
+const filterWarning = (x) => x.level >= 40
 filterWarning.label = 'LEVEL>=WARNING'
-const filterError = (x) => x.level >= 10
+const filterError = (x) => x.level >= 50
 filterError.label = 'LEVEL>=ERROR'
-const filterFatal = (x) => x.level >= 10
+const filterFatal = (x) => x.level >= 60
 filterFatal.label = 'LEVEL>=FATAL'
+
+const input = tty.ReadStream(fs.openSync('/dev/tty', 'r'))
+input.setRawMode(true).setEncoding('utf8')
+
+let nameWidth = 4
 
 function Main({ rows, columns }) {
   const pos = position ?? matching.length - 1
 
   const [inspect, setInspect] = React.useState()
+  const [selected, setSelected] = React.useState([])
+  const [query, setQuery] = React.useState('')
 
   const numLines = inspect ? 1 : Math.floor(rows / 2)
 
@@ -76,6 +86,27 @@ function Main({ rows, columns }) {
     }
 
     switch (input) {
+      case ' ':
+        setSelected(selected => {
+          const item = matching[pos]
+          const idx = selected.indexOf(item)
+          if (idx === -1) {
+            return [...selected, item].sort((a, b) => a - b)
+          } else {
+            return [...selected.slice(0, idx), ...selected.slice(idx + 1)]
+          }
+        })
+        break
+      case 'm': {
+        const next = matching.findIndex((x, idx) => idx > pos && selected.includes(x))
+        position = next !== -1 ? next : undefined
+        break
+      }
+      case 'M': {
+        const next = matching.slice(0, pos).findLastIndex((x) => selected.includes(x))
+        position = next !== -1 ? next : 0
+        break
+      }
       case '1':
         filters[0] = filterTrace
         rescan()
@@ -143,37 +174,51 @@ function Main({ rows, columns }) {
   for (let linePos = start; linePos < start + numLines; ++linePos) {
     if (linePos < 0) {
       if (linePos === -1) {
-        lines.push(<Text color='blue' dimColor>[start of file]</Text>)
+        lines.push(
+          <Text color='blue' dimColor>
+            [start of file]
+          </Text>
+        )
       }
       continue
     }
     if (linePos >= matching.length) {
       if (linePos === matching.length) {
-        lines.push(<Text color='blue' dimColor>[end of file]</Text>)
+        lines.push(
+          <Text color='blue' dimColor>
+            [{status}]
+          </Text>
+        )
       }
       continue
     }
-    const { time, level, msg = '', pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
+    const { time, level, msg = '', name, pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
+    nameWidth = Math.max(nameWidth, name?.length ?? 1)
     lines.push(
       <Box flexWrap='nowrap' gap='1'>
-        <Box minWidth={12}>
+        <Box width={23} flexShrink={0}>
           <Text wrap='truncate' dimColor>
             {formatTime(time)}
           </Text>
         </Box>
-        <Box minWidth={7}>
+        <Box width={7} flexShrink={0}>
           <Text wrap='truncate' {...levelProps(level)}>
             {formatLevel(level)}
           </Text>
         </Box>
+        <Box width={nameWidth} flexShrink={0}>
+          <Text wrap='truncate'>
+            {name ?? '-'}
+          </Text>
+        </Box>
         <Box flexShrink={0}>
-          <Text wrap='truncate' color={linePos === pos ? 'inverse' : ''}>
+          <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos ? true : false}>
             {msg}
           </Text>
         </Box>
-        <Box flexShrink={100}>
+        <Box flexShrink={100000} height={1}>
           <Text wrap='truncate' dimColor>
-            {formatRest(rest)}
+            {formatRest(rest).split('\n').at(0)}
           </Text>
         </Box>
       </Box>
@@ -190,21 +235,32 @@ function Main({ rows, columns }) {
         <Text>Total: {messages.length}</Text>
         <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
       </Box>
-      <Box borderStyle={inspect ? 'single' : 'double'} flexDirection='column' flexWrap='nowrap' height={numLines + 3}>
+      <Box
+        borderStyle={inspect ? 'single' : 'double'}
+        flexDirection='column'
+        flexWrap='nowrap'
+        height={numLines + 3}
+      >
         <Box flexWrap='nowrap' gap='1'>
-          <Box width={12}>
+          <Box width={23}>
             <Text dimColor>Date</Text>
           </Box>
           <Box width={7}>
             <Text dimColor>Level</Text>
           </Box>
-          <Text dimColor>Message {filters.map(fn => fn.label ?? fn.toString()).join(' & ')}</Text>
+          <Box width={nameWidth} height={1} overflowY='hidden'>
+            <Text dimColor>Name</Text>
+          </Box>
+          <Box height={1} overflowY='hidden'>
+            <Text dimColor>Message {filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
+          </Box>
         </Box>
         {lines}
       </Box>
       <Box borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
         <Text>{formatObject(rest, { lineWidth: columns - 4 })}</Text>
       </Box>
+      {/* <TextInput value={query} onChange={setQuery} onSubmit={() => {}}/> */}
     </Box>
   )
 }
@@ -226,7 +282,7 @@ function rescan() {
 }
 
 function redraw() {
-  render(<Main columns={process.stdout.columns} rows={process.stdout.rows} />)
+  render(<Main columns={process.stdout.columns} rows={process.stdout.rows} />, { stdin: input })
 }
 
 async function loop() {
@@ -261,11 +317,14 @@ setInterval(() => {
 
 await pipeline(
   process.argv.length > 2 ? fs.createReadStream(process.argv.at(-1)) : process.stdin,
-  ndjson.parse(),
+  ndjson.parse({ strict: false }),
   async (msgs) => {
     for await (const msg of msgs) {
       messages.push(msg)
       dirty = true
     }
+    status = 'end of file'
   }
-).catch((err) => {})
+).catch((err) => {
+  status = err.message
+})
