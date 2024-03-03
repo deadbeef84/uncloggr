@@ -229,9 +229,9 @@ function Main({ rows, columns }) {
   return (
     <Box flexDirection='column' height={rows} width={columns}>
       <Box gap='1' flexWrap='nowrap'>
-        <Text wrap='truncate-middle'>Position: {matching.at(pos)}</Text>
+        <Text wrap='truncate-middle'>Line: {matching.at(pos)}</Text>
         <Text>Matching: {matching.length}</Text>
-        <Text>Scanned: {scan}</Text>
+        {scan !== messages.length ? <Text>Scanned: {scan}</Text> : null}
         <Text>Total: {messages.length}</Text>
         <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
       </Box>
