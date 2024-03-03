@@ -30,7 +30,7 @@ export function formatLevel(level) {
   } else if (level >= 50) {
     return 'ERROR'
   } else if (level >= 40) {
-    return 'WARNING'
+    return 'WARN'
   } else if (level >= 30) {
     return 'INFO'
   } else if (level >= 20) {

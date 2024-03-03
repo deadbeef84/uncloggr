@@ -6,6 +6,7 @@ import tty from 'node:tty'
 import React from 'react'
 import { formatLevel, formatObject, formatRest, formatTime } from './format.mjs'
 import { render, Text, Box, useInput } from 'ink'
+import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
 
 let scan = 0
@@ -51,8 +52,6 @@ filterFatal.label = 'LEVEL>=FATAL'
 
 const input = tty.ReadStream(fs.openSync('/dev/tty', 'r'))
 input.setRawMode(true).setEncoding('utf8')
-
-let nameWidth = 4
 
 function Main({ rows, columns }) {
   const pos = position ?? matching.length - 1
@@ -169,8 +168,35 @@ function Main({ rows, columns }) {
     }
   })
 
-  const lines = []
+  const fields = ['seq', 'err.message']
+  const data = []
+
   const start = Math.max(pos - Math.floor(numLines / 2), -1)
+  for (let linePos = start; linePos < start + numLines; ++linePos) {
+    if (linePos < 0 || linePos >= matching.length) {
+      continue
+    }
+    const { time, level, msg = '', name, pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
+    data.push([
+      formatTime(time),
+      formatLevel(level),
+      name ?? '-',
+      msg,
+      ...fields.map(field => {
+        const value = fp.get(field, rest)
+        if (typeof value === 'string') {
+          return value
+        } else {
+          return JSON.stringify(value) ?? '-'
+        }
+      }),
+    ])
+  }
+
+  const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) => data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0))
+
+  let lineIndex = 0
+  const lines = []
   for (let linePos = start; linePos < start + numLines; ++linePos) {
     if (linePos < 0) {
       if (linePos === -1) {
@@ -192,39 +218,40 @@ function Main({ rows, columns }) {
       }
       continue
     }
-    const { time, level, msg = '', name, pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
-    nameWidth = Math.max(nameWidth, name?.length ?? 1)
+    const [time, level, name, msg, ...cols] = data.at(lineIndex++)
     lines.push(
       <Box flexWrap='nowrap' gap='1'>
-        <Box width={23} flexShrink={0}>
+        <Box width={widths[0]} flexShrink={0}>
           <Text wrap='truncate' dimColor>
-            {formatTime(time)}
+            {time}
           </Text>
         </Box>
-        <Box width={7} flexShrink={0}>
-          <Text wrap='truncate' {...levelProps(level)}>
-            {formatLevel(level)}
+        <Box width={widths[1]} flexShrink={0}>
+          <Text wrap='truncate' {...levelProps(messages[matching.at(linePos)]?.level)}>
+            {level}
           </Text>
         </Box>
-        <Box width={nameWidth} flexShrink={0}>
+        {/* <Box width={widths[2]} flexShrink={0}>
           <Text wrap='truncate'>
-            {name ?? '-'}
+            {name}
           </Text>
-        </Box>
-        <Box flexShrink={0}>
+        </Box> */}
+        <Box width={Math.min(widths[3], 32)} flexShrink={0}>
           <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos ? true : false}>
             {msg}
           </Text>
         </Box>
-        <Box flexShrink={100000} height={1}>
-          <Text wrap='truncate' dimColor>
-            {formatRest(rest).split('\n').at(0)}
-          </Text>
-        </Box>
+        {cols.map((col, idx) => (
+          <Box width={widths[4 + idx]} flexShrink={1}>
+            <Text wrap='truncate' dimColor>
+              {col}
+            </Text>
+          </Box>
+        ))}
       </Box>
     )
   }
-  const { time, level, msg, pid, hostname, ...rest } = messages[matching.at(pos)] ?? {}
+  const { time, level, name, msg, pid, hostname, ...rest } = messages[matching.at(pos)] ?? {}
 
   return (
     <Box flexDirection='column' height={rows} width={columns}>
@@ -242,24 +269,32 @@ function Main({ rows, columns }) {
         height={numLines + 3}
       >
         <Box flexWrap='nowrap' gap='1'>
-          <Box width={23}>
+          <Box width={widths[0]} flexShrink={0}>
             <Text dimColor>Date</Text>
           </Box>
-          <Box width={7}>
+          <Box width={widths[1]} flexShrink={0}>
             <Text dimColor>Level</Text>
           </Box>
-          <Box width={nameWidth} height={1} overflowY='hidden'>
+          {/* <Box width={widths[2]} height={1} overflowY='hidden'>
             <Text dimColor>Name</Text>
+          </Box> */}
+          <Box width={Math.min(widths[3], 32)} flexShrink={0} height={1} overflowY='hidden'>
+            <Text dimColor>Message</Text>
           </Box>
-          <Box height={1} overflowY='hidden'>
-            <Text dimColor>Message {filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
-          </Box>
+          {fields.map((field, idx) => (
+            <Box width={widths[4 + idx]} flexShrink={1}>
+              <Text wrap='truncate' dimColor>
+                {field}
+              </Text>
+            </Box>
+            ))}
         </Box>
         {lines}
       </Box>
       <Box borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
         <Text>{formatObject(rest, { lineWidth: columns - 4 })}</Text>
       </Box>
+      {/* {filters.map((fn) => fn.label ?? fn.toString()).join(' & ')} */}
       {/* <TextInput value={query} onChange={setQuery} onSubmit={() => {}}/> */}
     </Box>
   )
