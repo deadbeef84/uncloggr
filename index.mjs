@@ -2,9 +2,10 @@
 import { pipeline } from 'node:stream/promises'
 import ndjson from 'ndjson'
 import fs from 'node:fs'
+import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
-import { formatLevel, formatObject, formatRest, formatTime } from './format.mjs'
+import { formatLevel, formatObject, formatTime } from './format.mjs'
 import { render, Text, Box, useInput } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
@@ -16,10 +17,6 @@ let status = 'reading file'
 const messages = []
 const matching = []
 const filters = [() => true]
-
-function applyFilters(line) {
-  return filters.every((fn) => fn(line))
-}
 
 function levelProps(level) {
   if (level >= 60) {
@@ -58,12 +55,27 @@ function Main({ rows, columns }) {
 
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
+  const [prompt, setPrompt] = React.useState(false)
   const [query, setQuery] = React.useState('')
 
   const numLines = inspect ? 1 : Math.floor(rows / 2)
 
   const [key, setKey] = React.useState()
   useInput((input, key) => {
+    if (prompt) {
+      if (key.escape) {
+        setPrompt(false)
+      }
+      return
+    }
+
+    if (inspect) {
+      if (key.escape || key.return) {
+        setInspect(false)
+      }
+      return
+    }
+
     // This is a hack to force refresh...
     setKey({ input, key })
 
@@ -104,6 +116,10 @@ function Main({ rows, columns }) {
       case 'M': {
         const next = matching.slice(0, pos).findLastIndex((x) => selected.includes(x))
         position = next !== -1 ? next : 0
+        break
+      }
+      case '/': {
+        setPrompt(true)
         break
       }
       case '1':
@@ -194,6 +210,7 @@ function Main({ rows, columns }) {
   }
 
   const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) => data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0))
+  const msgWidth = columns - (widths.reduce((xs, x) => xs + x, 0) - widths[3])
 
   let lineIndex = 0
   const lines = []
@@ -236,7 +253,7 @@ function Main({ rows, columns }) {
             {name}
           </Text>
         </Box> */}
-        <Box width={Math.min(widths[3], 32)} flexShrink={0}>
+        <Box width={Math.min(widths[3], Math.max(msgWidth, Math.round(columns * 0.25)))} flexShrink={0}>
           <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos ? true : false}>
             {msg}
           </Text>
@@ -291,11 +308,38 @@ function Main({ rows, columns }) {
         </Box>
         {lines}
       </Box>
-      <Box borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
-        <Text>{formatObject(rest, { lineWidth: columns - 4 })}</Text>
-      </Box>
-      {/* {filters.map((fn) => fn.label ?? fn.toString()).join(' & ')} */}
-      {/* <TextInput value={query} onChange={setQuery} onSubmit={() => {}}/> */}
+      <ScrollBox key={matching[pos]} focus={inspect} boxHeight={rows - 8} borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
+        {formatObject(rest, { lineWidth: columns - 4 })}
+      </ScrollBox>
+      <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
+      {prompt ? <TextInput value={query} onChange={setQuery} onSubmit={() => {
+        const filterFn = msg => JSON.stringify(msg).includes(query)
+        filterFn.label = `/${prompt}`
+        filters.push(filterFn)
+        rescan()
+        setPrompt(false)
+      }}/> : null}
+    </Box>
+  )
+}
+
+function ScrollBox({ focus, boxHeight, children, ...props }) {
+  const lines = children.split('\n')
+  const contentHeight = lines.length
+  const [scroll, setScroll] = React.useState(0)
+  useInput((_, key) => {
+    if (!focus) {
+      return
+    }
+    if (key.upArrow) {
+      setScroll(x => Math.max(x - 1, 0))
+    } else if (key.downArrow) {
+      setScroll(x => Math.min(x + 1, Math.max(0, contentHeight - boxHeight)))
+    }
+  })
+  return (
+    <Box {...props}>
+      <Text>{lines.slice(scroll).join('\n')}</Text>
     </Box>
   )
 }
@@ -322,19 +366,26 @@ function redraw() {
 
 async function loop() {
   while (true) {
-    const interval = setInterval(() => redraw(), 100)
+    const start = Date.now()
     while (scan < messages.length) {
-      if (applyFilters(messages[scan])) {
+      const message = messages[scan]
+      if (filters.every((fn) => fn(message))) {
         matching.push(scan)
-        if (position === undefined && scanToDate && new Date(messages[scan].time) >= scanToDate) {
+        if (position === undefined && scanToDate && new Date(message.time) >= scanToDate) {
           position = matching.length - 1
           scanToDate = null
         }
       }
       ++scan
+      if ((Date.now() - start) > 100) {
+        break
+      }
     }
-    clearInterval(interval)
     redraw()
+    if (scan < messages.length) {
+      await tp.setTimeout(50)
+      continue
+    }
     await new Promise((resolve) => {
       update = resolve
     })
@@ -350,16 +401,20 @@ setInterval(() => {
   }
 }, 100)
 
-await pipeline(
-  process.argv.length > 2 ? fs.createReadStream(process.argv.at(-1)) : process.stdin,
-  ndjson.parse({ strict: false }),
-  async (msgs) => {
-    for await (const msg of msgs) {
-      messages.push(msg)
-      dirty = true
+const inputs = process.argv.length > 2 ? process.argv.slice(1).map(path => fs.createReadStream(path)) : [process.stdin]
+await Promise.all(inputs.map(async input => {
+  await pipeline(
+    input,
+    ndjson.parse({ strict: false }),
+    async (msgs) => {
+      for await (const msg of msgs) {
+        messages.push(msg)
+        dirty = true
+      }
+      
     }
-    status = 'end of file'
-  }
-).catch((err) => {
-  status = err.message
-})
+  ).catch((err) => {
+    status = err.message
+  })
+  // status = 'end of file'
+}))

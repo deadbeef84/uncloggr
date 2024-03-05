@@ -11,10 +11,7 @@ const dtf = new Intl.DateTimeFormat('sv-SE', {
 })
 
 export function formatTime(time) {
-  if (!time) {
-    return '?'
-  }
-  const date = new Date(time)
+  const date = time ? new Date(time) : null
   if (isNaN(date)) {
     return '<invalid date>'
   }
@@ -42,10 +39,4 @@ export function formatLevel(level) {
 
 export function formatObject(obj, opts) {
   return YAML.stringify(obj, { blockQuote: 'literal', aliasDuplicateObjects: false, ...opts })
-}
-
-export function formatRest(rest) {
-  return Object.entries(rest)
-    .map(([key, value]) => `${key}:${typeof value === 'string' ? value : JSON.stringify(value)}`)
-    .join(' ')
 }
