@@ -2,6 +2,9 @@
   "name": "pino-tui",
   "version": "1.0.0",
   "main": "index.mjs",
+  "bin": {
+    "pino-tui": "./dist/index.mjs"
+  },
   "scripts": {
     "build": "babel --keep-file-extension --out-dir dist *.mjs",
     "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs"

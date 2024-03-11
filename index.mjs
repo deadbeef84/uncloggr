@@ -1,4 +1,4 @@
-// node --watch index.mjs ../../tv2-enps/migration-tv2k-full1.log
+#!/usr/bin/env node
 import { pipeline } from 'node:stream/promises'
 import ndjson from 'ndjson'
 import fs from 'node:fs'
