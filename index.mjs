@@ -165,7 +165,7 @@ function Main({ rows, columns }) {
         const { msg } = messages[matching.at(position)] || {}
         if (msg) {
           const fn = (x) => x.msg === msg
-          fn.label = `msg != "${msg}"`
+          fn.label = `msg == "${msg}"`
           filters.push(fn)
           rescan()
         }
@@ -319,7 +319,7 @@ function Main({ rows, columns }) {
       <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
       {prompt ? <TextInput value={query} onChange={setQuery} onSubmit={() => {
         const filterFn = msg => JSON.stringify(msg).includes(query)
-        filterFn.label = `/${prompt}`
+        filterFn.label = `/${query}`
         filters.push(filterFn)
         rescan()
         setPrompt(false)
