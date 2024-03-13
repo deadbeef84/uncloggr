@@ -118,6 +118,11 @@ function Main({ rows, columns }) {
         position = next !== -1 ? next : 0
         break
       }
+      case 's': {
+        messages.sort((a, b) => new Date(a.time) - new Date(b.time))
+        rescan()
+        break
+      }
       case '/': {
         setPrompt(true)
         break
