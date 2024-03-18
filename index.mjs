@@ -215,7 +215,8 @@ function Main({ rows, columns }) {
   }
 
   const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) => data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0))
-  const msgWidth = columns - (widths.reduce((xs, x) => xs + x, 0) - widths[3])
+  const remainingColumns = columns - widths.reduce((xs, x) => xs + x, 0) + (widths[3] ?? 0)
+  const msgWidth = Math.min(widths[3], Math.max(remainingColumns, Math.round(columns * 0.25)))
 
   let lineIndex = 0
   const lines = []
@@ -258,8 +259,8 @@ function Main({ rows, columns }) {
             {name}
           </Text>
         </Box> */}
-        <Box width={Math.min(widths[3], Math.max(msgWidth, Math.round(columns * 0.25)))} flexShrink={0}>
-          <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos ? true : false}>
+        <Box width={msgWidth} flexShrink={0}>
+          <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos}>
             {msg}
           </Text>
         </Box>
@@ -300,7 +301,7 @@ function Main({ rows, columns }) {
           {/* <Box width={widths[2]} height={1} overflowY='hidden'>
             <Text dimColor>Name</Text>
           </Box> */}
-          <Box width={Math.min(widths[3], 32)} flexShrink={0} height={1} overflowY='hidden'>
+          <Box width={msgWidth} flexShrink={0} height={1} overflowY='hidden'>
             <Text dimColor>Message</Text>
           </Box>
           {fields.map((field, idx) => (
@@ -416,7 +417,7 @@ await Promise.all(inputs.map(async input => {
         messages.push(msg)
         dirty = true
       }
-      
+
     }
   ).catch((err) => {
     status = err.message
