@@ -12,8 +12,9 @@
   "dependencies": {
     "ink": "^4.4.1",
     "ink-text-input": "^5.0.1",
-    "ndjson": "^2.0.0",
+    "inquirer": "^9.2.16",
     "react": "^18.2.0",
+    "split2": "^4.2.0",
     "yaml": "^2.3.1"
   },
   "devDependencies": {

@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 import { pipeline } from 'node:stream/promises'
-import ndjson from 'ndjson'
+import split from 'split2'
 import fs from 'node:fs'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
 import { formatLevel, formatObject, formatTime } from './format.mjs'
-import { render, Text, Box, useInput } from 'ink'
+import { render, Text, Box, useApp, useInput, measureElement } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
+import { execFileSync, spawn } from 'node:child_process'
+import inquirer from 'inquirer'
 
-let scan = 0
-let update = null
-let position = 0
-let status = 'reading file'
-const messages = []
-const matching = []
-const filters = [() => true]
+const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 'answer' }])).answer
+
+const inputs = process.argv.length > 2 ? process.argv.slice(1).map(path => fs.createReadStream(path)) : [process.stdin] // dockerLogsProc.stdout, dockerLogsProc.stderr
 
 function levelProps(level) {
   if (level >= 60) {
@@ -47,20 +45,35 @@ filterError.label = 'LEVEL>=ERROR'
 const filterFatal = (x) => x.level >= 60
 filterFatal.label = 'LEVEL>=FATAL'
 
-const input = tty.ReadStream(fs.openSync('/dev/tty', 'r'))
+const ttyfd = fs.openSync('/dev/tty', 'r')
+const input = tty.ReadStream(ttyfd)
 input.setRawMode(true).setEncoding('utf8')
 
-function Main({ rows, columns }) {
-  const pos = position ?? matching.length - 1
+function Main(props) {
+  const { rows, columns, scanPosition, scan, status, messages, matching, filters, rescan: rescan2 } = props
 
+  const [position, setPosition] = React.useState(0)
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
   const [prompt, setPrompt] = React.useState(false)
   const [query, setQuery] = React.useState('')
 
-  const numLines = inspect ? 1 : Math.floor(rows / 2)
+  const pos = position ?? scanPosition ?? (matching.length - 1)
 
-  const [key, setKey] = React.useState()
+  const ref = React.useRef()
+  const [numLines, setNumLines] = React.useState(0)
+  React.useEffect(() => {
+    const { height } = measureElement(ref.current)
+    setNumLines(height - 3) // remove borders + headers
+  })
+
+  function rescan() {
+    rescan2(new Date(messages[matching.at(position ?? scanPosition)]?.time))
+    setPosition(undefined)
+  }
+
+  const { exit } = useApp()
+
   useInput((input, key) => {
     if (prompt) {
       if (key.escape) {
@@ -76,18 +89,15 @@ function Main({ rows, columns }) {
       return
     }
 
-    // This is a hack to force refresh...
-    setKey({ input, key })
-
     // upArrow downArrow leftArrow rightArrow pageDown pageUp return escape ctrl shift tab backspace delete meta
     if (key.upArrow) {
-      position = Math.max(pos - 1, 0)
+      setPosition(Math.max(pos - 1, 0))
     } else if (key.downArrow) {
-      position = Math.min(pos + 1, matching.length - 1)
+      setPosition(Math.min(pos + 1, matching.length - 1))
     } else if (key.pageUp) {
-      position = Math.max(pos - numLines, 0)
+      setPosition(Math.max(pos - numLines, 0))
     } else if (key.pageDown) {
-      position = Math.min(pos + numLines, matching.length - 1)
+      setPosition(Math.min(pos + numLines, matching.length - 1))
     } else if (key.return) {
       setInspect(!inspect)
     } else if (key.delete) {
@@ -110,12 +120,12 @@ function Main({ rows, columns }) {
         break
       case 'm': {
         const next = matching.findIndex((x, idx) => idx > pos && selected.includes(x))
-        position = next !== -1 ? next : undefined
+        setPosition(next !== -1 ? next : undefined)
         break
       }
       case 'M': {
         const next = matching.slice(0, pos).findLastIndex((x) => selected.includes(x))
-        position = next !== -1 ? next : 0
+        setPosition(next !== -1 ? next : 0)
         break
       }
       case 's': {
@@ -152,7 +162,7 @@ function Main({ rows, columns }) {
         rescan()
         break
       case '-': {
-        const { msg } = messages[matching.at(position)] || {}
+        const { msg } = messages[matching.at(pos)] || {}
         if (msg) {
           const fn = (x) => x.msg !== msg
           fn.label = `msg != "${msg}"`
@@ -162,7 +172,7 @@ function Main({ rows, columns }) {
         break
       }
       case '+': {
-        const { msg } = messages[matching.at(position)] || {}
+        const { msg } = messages[matching.at(pos)] || {}
         if (msg) {
           const fn = (x) => x.msg === msg
           fn.label = `msg == "${msg}"`
@@ -172,24 +182,24 @@ function Main({ rows, columns }) {
         break
       }
       case 'g': {
-        position = 0
+        setPosition(0)
         break
       }
       case 'F': {
-        position = undefined
+        setPosition(undefined)
         break
       }
       case 'G': {
-        position = matching.length - 1
+        setPosition(matching.length - 1)
         break
       }
       case 'q': {
-        process.exit()
+        exit()
       }
     }
   })
 
-  const fields = ['seq', 'err.message']
+  const fields = ['err.message']
   const data = []
 
   const start = Math.max(pos - Math.floor(numLines / 2), -1)
@@ -243,7 +253,7 @@ function Main({ rows, columns }) {
     }
     const [time, level, name, msg, ...cols] = data.at(lineIndex++)
     lines.push(
-      <Box flexWrap='nowrap' gap='1'>
+      <Box key={matching.at(linePos)} flexWrap='nowrap' gap='1'>
         <Box width={widths[0]} flexShrink={0}>
           <Text wrap='truncate' dimColor>
             {time}
@@ -286,10 +296,12 @@ function Main({ rows, columns }) {
         <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
       </Box>
       <Box
+        ref={ref}
         borderStyle={inspect ? 'single' : 'double'}
         flexDirection='column'
         flexWrap='nowrap'
-        height={numLines + 3}
+        flexBasis={4}
+        flexGrow={inspect ? 0 : 2}
       >
         <Box flexWrap='nowrap' gap='1'>
           <Box width={widths[0]} flexShrink={0}>
@@ -305,7 +317,7 @@ function Main({ rows, columns }) {
             <Text dimColor>Message</Text>
           </Box>
           {fields.map((field, idx) => (
-            <Box width={widths[4 + idx]} flexShrink={1}>
+            <Box key={idx} width={widths[4 + idx]} flexShrink={1}>
               <Text wrap='truncate' dimColor>
                 {field}
               </Text>
@@ -314,7 +326,7 @@ function Main({ rows, columns }) {
         </Box>
         {lines}
       </Box>
-      <ScrollBox key={matching[pos]} focus={inspect} boxHeight={rows - 8} borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
+      <ScrollBox key={matching[pos]} focus={inspect} borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
         {formatObject(rest, { lineWidth: columns - 4 })}
       </ScrollBox>
       <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
@@ -329,10 +341,12 @@ function Main({ rows, columns }) {
   )
 }
 
-function ScrollBox({ focus, boxHeight, children, ...props }) {
+function ScrollBox({ focus, children, ...props }) {
+  const [boxHeight, setBoxHeight] = React.useState(0)
   const lines = children.split('\n')
   const contentHeight = lines.length
   const [scroll, setScroll] = React.useState(0)
+
   useInput((_, key) => {
     if (!focus) {
       return
@@ -343,84 +357,197 @@ function ScrollBox({ focus, boxHeight, children, ...props }) {
       setScroll(x => Math.min(x + 1, Math.max(0, contentHeight - boxHeight)))
     }
   })
+
+  const ref = React.useRef();
+
+  React.useEffect(() => {
+    const { height } = measureElement(ref.current)
+    setBoxHeight(height)
+  })
+
   return (
-    <Box {...props}>
+    <Box ref={ref} {...props}>
       <Text>{lines.slice(scroll).join('\n')}</Text>
     </Box>
   )
 }
 
-const enterAltScreenCommand = '\x1b[?1049h'
-const leaveAltScreenCommand = '\x1b[?1049l'
-process.stdout.on('resize', () => {
-  redraw()
+/*
+const containers = execFileSync(
+  'docker',
+  ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
+  { encoding: 'utf8' }
+)
+  .trim()
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => line.split('\t'))
+  .sort((a, b) => a[2].localeCompare(b[2]))
+
+const container = await prompt({
+  type: 'list',
+  message: 'What container do you want to debug?',
+  choices: containers.map(([id, image, name]) => ({
+    name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+    short: id,
+    value: id,
+  })),
 })
 
-let scanToDate
-function rescan() {
-  if (position != null) {
-    scanToDate = new Date(messages[matching.at(position)]?.time)
-  }
-  scan = matching.length = 0
-  position = undefined
-  update()
-}
+const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
 
-function redraw() {
-  render(<Main columns={process.stdout.columns} rows={process.stdout.rows} />, { stdin: input })
-}
+const services = execFileSync(
+  'docker',
+  ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
+  { encoding: 'utf8' }
+)
+  .trim()
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => line.split('\t'))
+  .sort((a, b) => a[2].localeCompare(b[2]))
 
-async function loop() {
-  while (true) {
-    const start = Date.now()
-    while (scan < messages.length) {
-      const message = messages[scan]
-      if (filters.every((fn) => fn(message))) {
-        matching.push(scan)
-        if (position === undefined && scanToDate && new Date(message.time) >= scanToDate) {
-          position = matching.length - 1
-          scanToDate = null
-        }
-      }
-      ++scan
-      if ((Date.now() - start) > 100) {
-        break
-      }
-    }
-    redraw()
-    if (scan < messages.length) {
-      await tp.setTimeout(50)
-      continue
-    }
-    await new Promise((resolve) => {
-      update = resolve
-    })
-  }
-}
-loop().catch((err) => console.log('error', err))
+const container = await prompt({
+  type: 'list',
+  message: 'What service do you want to debug?',
+  choices: services.map(([id, image, name]) => ({
+    name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+    short: id,
+    value: id,
+  })),
+})
 
-let dirty = false
-setInterval(() => {
-  if (dirty) {
-    update()
-    dirty = false
-  }
-}, 100)
+const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
+*/
 
-const inputs = process.argv.length > 2 ? process.argv.slice(1).map(path => fs.createReadStream(path)) : [process.stdin]
-await Promise.all(inputs.map(async input => {
-  await pipeline(
-    input,
-    ndjson.parse({ strict: false }),
-    async (msgs) => {
-      for await (const msg of msgs) {
-        messages.push(msg)
-        dirty = true
-      }
-
-    }
-  ).catch((err) => {
-    status = err.message
+function App() {
+ const [state, setState] = React.useState({
+    columns: process.stdout.columns,
+    rows: process.stdout.rows,
+    scan: 0,
+    scanPosition: 0,
+    status: 'starting...',
+    messages: [],
+    matching: [],
+    filters: [],
+    completed: 0,
+    rescan: () => {},
   })
-  // status = 'end of file'
-}))
+
+  React.useEffect(() => {
+    const onResize = () => {
+      setState(state => ({
+        ...state,
+        columns: process.stdout.columns,
+        rows: process.stdout.rows,
+      }))
+    }
+    process.stdout.on('resize', onResize)
+    return () => {
+      process.stdout.off('resize', onResize)
+    }
+  }, [])
+
+  React.useLayoutEffect(() => {
+    const ac = new AbortController()
+
+    let scan = 0
+    let resume = null
+    let completed = 0
+    let status = 'starting...'
+    const messages = []
+    const matching = []
+    const filters = [() => true]
+
+    let scanPosition
+    let scanToDate
+    function rescan (date) {
+      if (date) {
+        scanToDate = date
+      }
+      scan = matching.length = 0
+      scanPosition = undefined
+      resume?.()
+    }
+
+    async function loop() {
+      while (!ac.signal.aborted) {
+        const start = Date.now()
+        while (scan < messages.length) {
+          const message = messages[scan]
+          if (filters.every((fn) => fn(message))) {
+            matching.push(scan)
+            if (scanPosition === undefined && scanToDate && new Date(message.time) >= scanToDate) {
+              scanPosition = matching.length - 1
+              scanToDate = null
+            }
+          }
+          ++scan
+          if ((Date.now() - start) > 100) {
+            break
+          }
+        }
+        setState(state => ({ ...state, scanPosition, scan, status, messages, matching, filters, completed, rescan }))
+        if (scan < messages.length) {
+          await tp.setTimeout(1)
+          continue
+        }
+        // wait for resume...
+        await new Promise((resolve) => {
+          resume = resolve
+        })
+        resume = null
+      }
+    }
+    loop().catch((err) => console.error('error', err))
+
+    status = `reading files (${completed}/${inputs.length})`
+
+    Promise.all(inputs.map(async (input, idx) => {
+      await pipeline(
+        input,
+        split(parseLine),
+        async (msgs) => {
+          for await (const msg of msgs) {
+            messages.push(inputs > 1 ? { ...msg, _input: idx } : msg)
+            if (resume) {
+              setImmediate(resume)
+              resume = null
+            }
+          }
+        },
+        { signal: ac.signal }
+      ).catch((err) => {
+        status = err.message
+      })
+      completed += 1
+      status = `reading files (${completed}/${inputs.length})`
+    })).then(() => {
+      status = 'end of file'
+    }, (err) => {
+      status = 'error reading input: ' + err.message
+    })
+
+    return () => {
+      ac.abort()
+      resume?.()
+    }
+  }, [])
+
+  return <Main {...state} />
+}
+
+// const enterAltScreenCommand = '\x1b[?1049h'
+// const leaveAltScreenCommand = '\x1b[?1049l'
+
+const { waitUntilExit } = render(<App columns={process.stdout.columns} rows={process.stdout.rows} />, { stdin: input })
+await waitUntilExit()
+fs.closeSync(ttyfd)
+
+function parseLine (row) {
+  try {
+    if (row) return JSON.parse(row)
+  } catch (err) {
+    return { msg: row, err, level: 100 }
+  }
+}

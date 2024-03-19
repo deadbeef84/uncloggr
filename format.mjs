@@ -12,7 +12,7 @@ const dtf = new Intl.DateTimeFormat('sv-SE', {
 
 export function formatTime(time) {
   const date = time ? new Date(time) : null
-  if (isNaN(date)) {
+  if (!date || isNaN(date)) {
     return '<invalid date>'
   }
   return dtf.format(date)
@@ -22,7 +22,9 @@ export function formatLevel(level) {
   if (level == null || !Number.isFinite(level)) {
     return '?'
   }
-  if (level >= 60) {
+  if (level === 100) {
+    return 'INVALID'
+  } else if (level >= 60) {
     return 'FATAL'
   } else if (level >= 50) {
     return 'ERROR'
