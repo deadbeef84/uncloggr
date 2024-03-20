@@ -14,7 +14,10 @@ import inquirer from 'inquirer'
 
 const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 'answer' }])).answer
 
-const inputs = process.argv.length > 2 ? process.argv.slice(1).map(path => fs.createReadStream(path)) : [process.stdin] // dockerLogsProc.stdout, dockerLogsProc.stderr
+const inputs =
+  process.argv.length > 2
+    ? process.argv.slice(2).map((path) => fs.createReadStream(path))
+    : [process.stdin] // dockerLogsProc.stdout, dockerLogsProc.stderr
 
 function levelProps(level) {
   if (level >= 60) {
@@ -50,15 +53,24 @@ const input = tty.ReadStream(ttyfd)
 input.setRawMode(true).setEncoding('utf8')
 
 function Main(props) {
-  const { rows, columns, scanPosition, scan, status, messages, matching, filters, rescan: rescan2 } = props
+  const {
+    rows,
+    columns,
+    scanPosition,
+    scan,
+    status,
+    messages,
+    matching,
+    filters,
+    rescan: rescan2,
+  } = props
 
+  const { exit } = useApp()
   const [position, setPosition] = React.useState(0)
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
   const [prompt, setPrompt] = React.useState(false)
   const [query, setQuery] = React.useState('')
-
-  const pos = position ?? scanPosition ?? (matching.length - 1)
 
   const ref = React.useRef()
   const [numLines, setNumLines] = React.useState(0)
@@ -72,7 +84,7 @@ function Main(props) {
     setPosition(undefined)
   }
 
-  const { exit } = useApp()
+  const pos = position ?? scanPosition ?? matching.length - 1
 
   useInput((input, key) => {
     if (prompt) {
@@ -108,7 +120,7 @@ function Main(props) {
 
     switch (input) {
       case ' ':
-        setSelected(selected => {
+        setSelected((selected) => {
           const item = matching[pos]
           const idx = selected.indexOf(item)
           if (idx === -1) {
@@ -207,13 +219,21 @@ function Main(props) {
     if (linePos < 0 || linePos >= matching.length) {
       continue
     }
-    const { time, level, msg = '', name, pid, hostname, ...rest } = messages[matching.at(linePos)] || {}
+    const {
+      time,
+      level,
+      msg = '',
+      name,
+      pid,
+      hostname,
+      ...rest
+    } = messages[matching.at(linePos)] || {}
     data.push([
       formatTime(time),
       formatLevel(level),
       name ?? '-',
       msg,
-      ...fields.map(field => {
+      ...fields.map((field) => {
         const value = fp.get(field, rest)
         if (typeof value === 'string') {
           return value
@@ -224,7 +244,9 @@ function Main(props) {
     ])
   }
 
-  const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) => data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0))
+  const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) =>
+    data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0)
+  )
   const remainingColumns = columns - widths.reduce((xs, x) => xs + x, 0) + (widths[3] ?? 0)
   const msgWidth = Math.min(widths[3], Math.max(remainingColumns, Math.round(columns * 0.25)))
 
@@ -234,9 +256,9 @@ function Main(props) {
     if (linePos < 0) {
       if (linePos === -1) {
         lines.push(
-          <Text color='blue' dimColor>
-            [start of file]
-          </Text>
+          <Box marginLeft={widths[0] + widths[1] + 2}>
+            <Text color='blue' dimColor>[start of file]</Text>
+          </Box>
         )
       }
       continue
@@ -270,7 +292,11 @@ function Main(props) {
           </Text>
         </Box> */}
         <Box width={msgWidth} flexShrink={0}>
-          <Text wrap='truncate' color={selected.includes(matching.at(linePos)) ? 'blue': null} inverse={linePos === pos}>
+          <Text
+            wrap='truncate'
+            color={selected.includes(matching.at(linePos)) ? 'blue' : null}
+            inverse={linePos === pos}
+          >
             {msg}
           </Text>
         </Box>
@@ -297,7 +323,8 @@ function Main(props) {
       </Box>
       <Box
         ref={ref}
-        borderStyle={inspect ? 'single' : 'double'}
+        borderStyle='round'
+        borderColor={inspect ? '' : 'blue'}
         flexDirection='column'
         flexWrap='nowrap'
         flexBasis={4}
@@ -305,10 +332,10 @@ function Main(props) {
       >
         <Box flexWrap='nowrap' gap='1'>
           <Box width={widths[0]} flexShrink={0}>
-            <Text dimColor>Date</Text>
+            <Text dimColor wrap='truncate'>Date</Text>
           </Box>
           <Box width={widths[1]} flexShrink={0}>
-            <Text dimColor>Level</Text>
+            <Text dimColor wrap='truncate'>Level</Text>
           </Box>
           {/* <Box width={widths[2]} height={1} overflowY='hidden'>
             <Text dimColor>Name</Text>
@@ -322,21 +349,35 @@ function Main(props) {
                 {field}
               </Text>
             </Box>
-            ))}
+          ))}
         </Box>
         {lines}
       </Box>
-      <ScrollBox key={matching[pos]} focus={inspect} borderStyle={inspect ? 'double' : 'single'} overflow='hidden' flexBasis={0} flexGrow={1}>
+      <ScrollBox
+        key={matching[pos]}
+        focus={inspect}
+        borderStyle='round'
+        borderColor={inspect ? 'blue' : ''}
+        overflow='hidden'
+        flexBasis={0}
+        flexGrow={1}
+      >
         {formatObject(rest, { lineWidth: columns - 4 })}
       </ScrollBox>
       <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
-      {prompt ? <TextInput value={query} onChange={setQuery} onSubmit={() => {
-        const filterFn = msg => JSON.stringify(msg).includes(query)
-        filterFn.label = `/${query}`
-        filters.push(filterFn)
-        rescan()
-        setPrompt(false)
-      }}/> : null}
+      {prompt ? (
+        <TextInput
+          value={query}
+          onChange={setQuery}
+          onSubmit={() => {
+            const filterFn = (msg) => JSON.stringify(msg).includes(query)
+            filterFn.label = `/${query}`
+            filters.push(filterFn)
+            rescan()
+            setPrompt(false)
+          }}
+        />
+      ) : null}
     </Box>
   )
 }
@@ -352,13 +393,13 @@ function ScrollBox({ focus, children, ...props }) {
       return
     }
     if (key.upArrow) {
-      setScroll(x => Math.max(x - 1, 0))
+      setScroll((x) => Math.max(x - 1, 0))
     } else if (key.downArrow) {
-      setScroll(x => Math.min(x + 1, Math.max(0, contentHeight - boxHeight)))
+      setScroll((x) => Math.min(x + 1, Math.max(0, contentHeight - boxHeight)))
     }
   })
 
-  const ref = React.useRef();
+  const ref = React.useRef()
 
   React.useEffect(() => {
     const { height } = measureElement(ref.current)
@@ -421,7 +462,7 @@ const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ign
 */
 
 function App() {
- const [state, setState] = React.useState({
+  const [state, setState] = React.useState({
     columns: process.stdout.columns,
     rows: process.stdout.rows,
     scan: 0,
@@ -436,7 +477,7 @@ function App() {
 
   React.useEffect(() => {
     const onResize = () => {
-      setState(state => ({
+      setState((state) => ({
         ...state,
         columns: process.stdout.columns,
         rows: process.stdout.rows,
@@ -461,7 +502,7 @@ function App() {
 
     let scanPosition
     let scanToDate
-    function rescan (date) {
+    function rescan(date) {
       if (date) {
         scanToDate = date
       }
@@ -483,13 +524,23 @@ function App() {
             }
           }
           ++scan
-          if ((Date.now() - start) > 100) {
+          if (Date.now() - start > 200) {
             break
           }
         }
-        setState(state => ({ ...state, scanPosition, scan, status, messages, matching, filters, completed, rescan }))
+        setState((state) => ({
+          ...state,
+          scanPosition,
+          scan,
+          status,
+          messages,
+          matching,
+          filters,
+          completed,
+          rescan,
+        }))
         if (scan < messages.length) {
-          await tp.setTimeout(1)
+          await tp.setTimeout(10)
           continue
         }
         // wait for resume...
@@ -499,34 +550,42 @@ function App() {
         resume = null
       }
     }
-    loop().catch((err) => console.error('error', err))
 
     status = `reading files (${completed}/${inputs.length})`
+    loop().catch((err) => console.error('error', err))
 
-    Promise.all(inputs.map(async (input, idx) => {
-      await pipeline(
-        input,
-        split(parseLine),
-        async (msgs) => {
-          for await (const msg of msgs) {
-            messages.push(inputs > 1 ? { ...msg, _input: idx } : msg)
-            if (resume) {
-              setImmediate(resume)
-              resume = null
+    Promise.all(
+      inputs.map(async (input, idx) => {
+        await pipeline(
+          input,
+          split(parseLine),
+          async (msgs) => {
+            for await (const msg of msgs) {
+              messages.push(inputs > 1 ? { ...msg, _input: idx } : msg)
+              if (resume) {
+                setImmediate(resume)
+                resume = null
+              }
             }
-          }
-        },
-        { signal: ac.signal }
-      ).catch((err) => {
-        status = err.message
+          },
+          { signal: ac.signal }
+        ).catch((err) => {
+          status = err.message
+        })
+        completed += 1
+        status = `reading files (${completed}/${inputs.length})`
+        resume?.()
       })
-      completed += 1
-      status = `reading files (${completed}/${inputs.length})`
-    })).then(() => {
-      status = 'end of file'
-    }, (err) => {
-      status = 'error reading input: ' + err.message
-    })
+    ).then(
+      () => {
+        status = 'end of file'
+        resume?.()
+      },
+      (err) => {
+        status = 'error reading input: ' + err.message
+        resume?.()
+      }
+    )
 
     return () => {
       ac.abort()
@@ -540,11 +599,14 @@ function App() {
 // const enterAltScreenCommand = '\x1b[?1049h'
 // const leaveAltScreenCommand = '\x1b[?1049l'
 
-const { waitUntilExit } = render(<App columns={process.stdout.columns} rows={process.stdout.rows} />, { stdin: input })
+const { waitUntilExit } = render(
+  <App columns={process.stdout.columns} rows={process.stdout.rows} />,
+  { stdin: input }
+)
 await waitUntilExit()
 fs.closeSync(ttyfd)
 
-function parseLine (row) {
+function parseLine(row) {
   try {
     if (row) return JSON.parse(row)
   } catch (err) {
