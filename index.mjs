@@ -132,9 +132,10 @@ function Main(props) {
 
   const { exit } = useApp()
   const [position, setPosition] = React.useState(0) // undefined = last, null = scanPosition
+  const [fields, setFields] = React.useState(['err.message'])
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
-  const [prompt, setPrompt] = React.useState(false)
+  const [prompt, setPrompt] = React.useState(null)
   const [query, setQuery] = React.useState('')
 
   const ref = React.useRef()
@@ -154,7 +155,7 @@ function Main(props) {
   useInput((input, key) => {
     if (prompt) {
       if (key.escape) {
-        setPrompt(false)
+        setPrompt(null)
       }
       return
     }
@@ -210,8 +211,27 @@ function Main(props) {
         rescan()
         break
       }
+      case '*': {
+        setPrompt({
+          label: 'Add Field',
+          onSubmit: (field) => {
+            if (field) {
+              setFields([...fields, field])
+            }
+          },
+        })
+        break
+      }
       case '/': {
-        setPrompt(true)
+        setPrompt({
+          label: 'Filter',
+          onSubmit: (query) => {
+            const filterFn = (msg) => JSON.stringify(msg).includes(query)
+            filterFn.label = `/${query}`
+            filters.push(filterFn)
+            rescan()
+          },
+        })
         break
       }
       case '1':
@@ -281,7 +301,6 @@ function Main(props) {
     }
   })
 
-  const fields = ['err.message']
   const data = []
 
   const start = Math.max(pos - Math.floor(numLines / 2), -1)
@@ -436,17 +455,18 @@ function Main(props) {
       </ScrollBox>
       <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
       {prompt ? (
-        <TextInput
-          value={query}
-          onChange={setQuery}
-          onSubmit={() => {
-            const filterFn = (msg) => JSON.stringify(msg).includes(query)
-            filterFn.label = `/${query}`
-            filters.push(filterFn)
-            rescan()
-            setPrompt(false)
-          }}
-        />
+        <Box>
+          <Text>{prompt.label}: </Text>
+          <TextInput
+            value={query}
+            onChange={setQuery}
+            onSubmit={() => {
+              prompt.onSubmit(query)
+              setQuery('')
+              setPrompt(null)
+            }}
+          />
+        </Box>
       ) : null}
     </Box>
   )
