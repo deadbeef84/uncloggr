@@ -66,7 +66,7 @@ function Main(props) {
   } = props
 
   const { exit } = useApp()
-  const [position, setPosition] = React.useState(0)
+  const [position, setPosition] = React.useState(0) // undefined = last, null = scanPosition
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
   const [prompt, setPrompt] = React.useState(false)
@@ -81,10 +81,10 @@ function Main(props) {
 
   function rescan() {
     rescan2(new Date(messages[matching.at(position ?? scanPosition)]?.time))
-    setPosition(undefined)
+    setPosition(null)
   }
 
-  const pos = position ?? scanPosition ?? matching.length - 1
+  const pos = (position === null ? scanPosition : position) ?? matching.length - 1
 
   useInput((input, key) => {
     if (prompt) {
