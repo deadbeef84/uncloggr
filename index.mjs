@@ -64,13 +64,11 @@ if (opts.from === 'pm2') {
       execFileSync('pm2', ['jlist'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env })
     )
 
-    procs = [
-      await prompt({
-        type: 'list',
-        message: 'What process?',
-        choices: processes.map(({ name }) => name),
-      }),
-    ]
+    procs = await prompt({
+      type: 'checkbox',
+      message: 'What processes?',
+      choices: processes.map(({ name }) => name),
+    })
   }
 
   inputs = procs.flatMap((name) => {
@@ -79,36 +77,48 @@ if (opts.from === 'pm2') {
       env,
     })
     return [
-      Object.assign(proc.stdout, { label: `pm2:${name}` }),
-      Object.assign(proc.stderr, { label: `pm2:${name}:stderr` }),
+      Object.assign(proc.stdout, { label: name }),
+      Object.assign(proc.stderr, { label: `${name}:stderr` }),
     ]
   })
 } else if (opts.from === 'docker') {
-  const containers = execFileSync(
-    'docker',
-    ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
-    { encoding: 'utf8' }
-  )
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => line.split('\t'))
-    .sort((a, b) => a[2].localeCompare(b[2]))
+  let selected = argv
+  if (!selected.length) {
+    const containers = execFileSync(
+      'docker',
+      ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
+      { encoding: 'utf8' }
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split('\t'))
+      .sort((a, b) => a[2].localeCompare(b[2]))
 
-  const container = await prompt({
-    type: 'list',
-    message: 'What container?',
-    choices: containers.map(([id, image, name]) => ({
-      name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-      short: id,
-      value: id,
-    })),
-  })
+    selected = await prompt({
+      type: 'checkbox',
+      message: 'What container?',
+      choices: containers.map(([id, image, name]) => ({
+        name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+        short: id,
+        value: id,
+      })),
+    })
+  }
 
-  const dockerLogsProc = spawn('docker', ['logs', '-f', container], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+  if (selected.length > 1) {
+    opts.sort ??= true
+  }
+
+  inputs = selected.flatMap((container) => {
+    const dockerLogsProc = spawn('docker', ['logs', '-f', container], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    return [
+      Object.assign(dockerLogsProc.stdout, { label: container }),
+      Object.assign(dockerLogsProc.stderr, { label: `${container}:stderr` }),
+    ]
   })
-  inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
 } else if (opts.from === 'docker-service') {
   opts.sort ??= true
   const services = argv.length
@@ -125,17 +135,15 @@ if (opts.from === 'pm2') {
           .map((line) => line.split('\t'))
           .sort((a, b) => a[2].localeCompare(b[2]))
 
-        return [
-          await prompt({
-            type: 'list',
-            message: 'What service?',
-            choices: services.map(([id, image, name]) => ({
-              name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-              short: id,
-              value: id,
-            })),
-          }),
-        ]
+        return await prompt({
+          type: 'checkbox',
+          message: 'What service?',
+          choices: services.map(([id, image, name]) => ({
+            name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+            short: id,
+            value: id,
+          })),
+        })
       })()
 
   inputs = services.flatMap((service) => {
@@ -638,7 +646,7 @@ function App() {
           const message = messages[scan]
           if (filters.every((fn) => fn(message))) {
             if (sort) {
-              const idx = fp.sortedIndexBy(idx => messages[idx].time, scan, matching)
+              const idx = fp.sortedIndexBy((idx) => messages[idx].time, scan, matching)
               matching.splice(idx, 0, scan)
             } else {
               matching.push(scan)
@@ -729,8 +737,14 @@ const { waitUntilExit } = render(
   <App columns={process.stdout.columns} rows={process.stdout.rows} />,
   { stdin: input }
 )
+
 await waitUntilExit()
-fs.closeSync(ttyfd)
+
+// input.setRawMode(false)
+// input.destroy()
+// fs.closeSync(ttyfd)
+// console.log('all done')
+process.exit(0)
 
 function parseLine(row) {
   try {
