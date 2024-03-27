@@ -193,6 +193,11 @@ function Main(props) {
         }
         break
       }
+      case 'c': {
+        messages.length = 0
+        rescan()
+        break
+      }
       case 'g': {
         setPosition(0)
         break
