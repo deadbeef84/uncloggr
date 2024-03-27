@@ -19,11 +19,11 @@ const { values: opts, positionals: argv } = parseArgs({
   options: {
     docker: {
       type: 'string',
-      short: 'd'
-    }
+      short: 'd',
+    },
   },
   allowPositionals: true,
-  strict: true
+  strict: true,
 })
 
 let inputs
@@ -50,7 +50,9 @@ if (opts.docker === 'container') {
     })),
   })
 
-  const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const dockerLogsProc = spawn('docker', ['logs', '-f', container], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
 } else if (opts.docker === 'service') {
   const services = execFileSync(
@@ -73,16 +75,14 @@ if (opts.docker === 'container') {
       value: id,
     })),
   })
-  const dockerLogsProc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const dockerLogsProc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
   // TODO: enable autosort?
 } else {
-  inputs =
-   argv.length
-     ? argv.slice(2).map((path) => fs.createReadStream(path))
-     : [process.stdin]
+  inputs = argv.length ? argv.slice(2).map((path) => fs.createReadStream(path)) : [process.stdin]
 }
-
 
 function levelProps(level) {
   if (level >= 60) {
@@ -346,7 +346,9 @@ function Main(props) {
       if (linePos === -1) {
         lines.push(
           <Box marginLeft={widths[0] + widths[1] + 2}>
-            <Text color='blue' dimColor>[start of file]</Text>
+            <Text color='blue' dimColor>
+              [start of file]
+            </Text>
           </Box>
         )
       }
@@ -421,10 +423,14 @@ function Main(props) {
       >
         <Box flexWrap='nowrap' gap='1'>
           <Box width={widths[0]} flexShrink={0}>
-            <Text dimColor wrap='truncate'>Date</Text>
+            <Text dimColor wrap='truncate'>
+              Date
+            </Text>
           </Box>
           <Box width={widths[1]} flexShrink={0}>
-            <Text dimColor wrap='truncate'>Level</Text>
+            <Text dimColor wrap='truncate'>
+              Level
+            </Text>
           </Box>
           {/* <Box width={widths[2]} height={1} overflowY='hidden'>
             <Text dimColor>Name</Text>
