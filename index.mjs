@@ -11,13 +11,78 @@ import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
 import { execFileSync, spawn } from 'node:child_process'
 import inquirer from 'inquirer'
+import { parseArgs } from 'node:util'
 
 const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 'answer' }])).answer
 
-const inputs =
-  process.argv.length > 2
-    ? process.argv.slice(2).map((path) => fs.createReadStream(path))
-    : [process.stdin] // dockerLogsProc.stdout, dockerLogsProc.stderr
+const { values: opts, positionals: argv } = parseArgs({
+  options: {
+    docker: {
+      type: 'string',
+      short: 'd'
+    }
+  },
+  allowPositionals: true,
+  strict: true
+})
+
+let inputs
+
+if (opts.docker === 'container') {
+  const containers = execFileSync(
+    'docker',
+    ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
+    { encoding: 'utf8' }
+  )
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split('\t'))
+    .sort((a, b) => a[2].localeCompare(b[2]))
+
+  const container = await prompt({
+    type: 'list',
+    message: 'What container?',
+    choices: containers.map(([id, image, name]) => ({
+      name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+      short: id,
+      value: id,
+    })),
+  })
+
+  const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
+  inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
+} else if (opts.docker === 'service') {
+  const services = execFileSync(
+    'docker',
+    ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Name}}'],
+    { encoding: 'utf8' }
+  )
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split('\t'))
+    .sort((a, b) => a[2].localeCompare(b[2]))
+
+  const service = await prompt({
+    type: 'list',
+    message: 'What service?',
+    choices: services.map(([id, image, name]) => ({
+      name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+      short: id,
+      value: id,
+    })),
+  })
+  const dockerLogsProc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], { stdio: ['ignore', 'pipe', 'pipe'] })
+  inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
+  // TODO: enable autosort?
+} else {
+  inputs =
+   argv.length
+     ? argv.slice(2).map((path) => fs.createReadStream(path))
+     : [process.stdin]
+}
+
 
 function levelProps(level) {
   if (level >= 60) {
@@ -417,54 +482,6 @@ function ScrollBox({ focus, children, ...props }) {
     </Box>
   )
 }
-
-/*
-const containers = execFileSync(
-  'docker',
-  ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
-  { encoding: 'utf8' }
-)
-  .trim()
-  .split('\n')
-  .filter(Boolean)
-  .map((line) => line.split('\t'))
-  .sort((a, b) => a[2].localeCompare(b[2]))
-
-const container = await prompt({
-  type: 'list',
-  message: 'What container do you want to debug?',
-  choices: containers.map(([id, image, name]) => ({
-    name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-    short: id,
-    value: id,
-  })),
-})
-
-const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
-
-const services = execFileSync(
-  'docker',
-  ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
-  { encoding: 'utf8' }
-)
-  .trim()
-  .split('\n')
-  .filter(Boolean)
-  .map((line) => line.split('\t'))
-  .sort((a, b) => a[2].localeCompare(b[2]))
-
-const container = await prompt({
-  type: 'list',
-  message: 'What service do you want to debug?',
-  choices: services.map(([id, image, name]) => ({
-    name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-    short: id,
-    value: id,
-  })),
-})
-
-const dockerLogsProc = spawn('docker', ['logs', '-f', container], { stdio: ['ignore', 'pipe', 'pipe'] })
-*/
 
 function App() {
   const [state, setState] = React.useState({
