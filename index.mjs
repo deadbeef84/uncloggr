@@ -2,6 +2,7 @@
 import { pipeline } from 'node:stream/promises'
 import split from 'split2'
 import fs from 'node:fs'
+import path from 'node:path'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
@@ -17,9 +18,17 @@ const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 
 
 const { values: opts, positionals: argv } = parseArgs({
   options: {
-    docker: {
+    from: {
       type: 'string',
-      short: 'd',
+      short: 'f',
+    },
+    tail: {
+      type: 'string',
+      short: 't',
+    },
+    sort: {
+      type: 'boolean',
+      short: 's',
     },
   },
   allowPositionals: true,
@@ -28,7 +37,53 @@ const { values: opts, positionals: argv } = parseArgs({
 
 let inputs
 
-if (opts.docker === 'container') {
+if (!opts.from && !argv.length && process.stdin.isTTY) {
+  opts.from = await prompt({
+    type: 'list',
+    message: 'From?',
+    choices: ['pm2', 'docker', 'docker-service', 'file'],
+  })
+}
+
+if (opts.from === 'pm2') {
+  const env = { ...process.env }
+
+  let p = process.cwd()
+  while (p) {
+    const pm2 = path.join(p, 'node_modules', '.bin', 'pm2')
+    if (fs.existsSync(pm2)) {
+      env.PATH = [path.dirname(pm2), env.PATH].filter(Boolean).join(path.delimiter)
+      break
+    }
+    p = path.dirname(p)
+  }
+
+  let procs = argv
+  if (!procs.length) {
+    const processes = JSON.parse(
+      execFileSync('pm2', ['jlist'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env })
+    )
+
+    procs = [
+      await prompt({
+        type: 'list',
+        message: 'What process?',
+        choices: processes.map(({ name }) => name),
+      }),
+    ]
+  }
+
+  inputs = procs.flatMap((name) => {
+    const proc = spawn('pm2', ['logs', '--raw', '--lines', opts.tail ?? '1000', name], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    })
+    return [
+      Object.assign(proc.stdout, { label: `pm2:${name}` }),
+      Object.assign(proc.stderr, { label: `pm2:${name}:stderr` }),
+    ]
+  })
+} else if (opts.from === 'docker') {
   const containers = execFileSync(
     'docker',
     ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
@@ -54,34 +109,52 @@ if (opts.docker === 'container') {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
-} else if (opts.docker === 'service') {
-  const services = execFileSync(
-    'docker',
-    ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Name}}'],
-    { encoding: 'utf8' }
-  )
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => line.split('\t'))
-    .sort((a, b) => a[2].localeCompare(b[2]))
+} else if (opts.from === 'docker-service') {
+  opts.sort ??= true
+  const services = argv.length
+    ? argv
+    : await (async () => {
+        const services = execFileSync(
+          'docker',
+          ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Name}}'],
+          { encoding: 'utf8' }
+        )
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => line.split('\t'))
+          .sort((a, b) => a[2].localeCompare(b[2]))
 
-  const service = await prompt({
-    type: 'list',
-    message: 'What service?',
-    choices: services.map(([id, image, name]) => ({
-      name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-      short: id,
-      value: id,
-    })),
+        return [
+          await prompt({
+            type: 'list',
+            message: 'What service?',
+            choices: services.map(([id, image, name]) => ({
+              name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
+              short: id,
+              value: id,
+            })),
+          }),
+        ]
+      })()
+
+  inputs = services.flatMap((service) => {
+    const proc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    return [
+      Object.assign(proc.stdout, { label: `${service}:stdout` }),
+      Object.assign(proc.stderr, { label: `${service}:stderr` }),
+    ]
   })
-  const dockerLogsProc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+} else if (argv.length) {
+  inputs = argv.map((path) => {
+    const stream = fs.createReadStream(path)
+    stream.label = path
+    return stream
   })
-  inputs = [dockerLogsProc.stdout, dockerLogsProc.stderr]
-  // TODO: enable autosort?
 } else {
-  inputs = argv.length ? argv.slice(2).map((path) => fs.createReadStream(path)) : [process.stdin]
+  inputs = [Object.assign(process.stdin, { label: 'stdin' })]
 }
 
 function levelProps(level) {
@@ -377,11 +450,9 @@ function Main(props) {
             {level}
           </Text>
         </Box>
-        {/* <Box width={widths[2]} flexShrink={0}>
-          <Text wrap='truncate'>
-            {name}
-          </Text>
-        </Box> */}
+        <Box width={widths[2]} flexShrink={0}>
+          <Text wrap='truncate'>{name}</Text>
+        </Box>
         <Box width={msgWidth} flexShrink={0}>
           <Text
             wrap='truncate'
@@ -432,9 +503,9 @@ function Main(props) {
               Level
             </Text>
           </Box>
-          {/* <Box width={widths[2]} height={1} overflowY='hidden'>
+          <Box width={widths[2]} height={1} overflowY='hidden'>
             <Text dimColor>Name</Text>
-          </Box> */}
+          </Box>
           <Box width={msgWidth} flexShrink={0} height={1} overflowY='hidden'>
             <Text dimColor>Message</Text>
           </Box>
@@ -540,6 +611,7 @@ function App() {
   React.useLayoutEffect(() => {
     const ac = new AbortController()
 
+    let sort = opts.sort
     let scan = 0
     let resume = null
     let completed = 0
@@ -565,7 +637,12 @@ function App() {
         while (scan < messages.length) {
           const message = messages[scan]
           if (filters.every((fn) => fn(message))) {
-            matching.push(scan)
+            if (sort) {
+              const idx = fp.sortedIndexBy(idx => messages[idx].time, scan, matching)
+              matching.splice(idx, 0, scan)
+            } else {
+              matching.push(scan)
+            }
             if (scanPosition === undefined && scanToDate && new Date(message.time) >= scanToDate) {
               scanPosition = matching.length - 1
               scanToDate = null
@@ -609,7 +686,8 @@ function App() {
           split(parseLine),
           async (msgs) => {
             for await (const msg of msgs) {
-              messages.push(inputs > 1 ? { ...msg, _input: idx } : msg)
+              msg.time ??= 0
+              messages.push(inputs.length > 1 ? { ...msg, _from: input.label ?? idx } : msg)
               if (resume) {
                 setImmediate(resume)
                 resume = null
