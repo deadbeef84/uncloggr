@@ -213,7 +213,8 @@ function Main(props) {
 
   const { exit } = useApp()
   const [position, setPosition] = React.useState(0) // undefined = last, null = scanPosition
-  const [fields, setFields] = React.useState(['err.message'])
+  const [fields, setFields] = React.useState(['time', 'level', 'name', 'msg', 'err.message'])
+  const [selectedField, setSelectedField] = React.useState(3)
   const [inspect, setInspect] = React.useState()
   const [selected, setSelected] = React.useState([])
   const [prompt, setPrompt] = React.useState(null)
@@ -257,6 +258,10 @@ function Main(props) {
       setPosition(Math.max(pos - numLines, 0))
     } else if (key.pageDown) {
       setPosition(Math.min(pos + numLines, matching.length - 1))
+    } else if (key.leftArrow) {
+      setSelectedField(Math.max(selectedField - 1, 0))
+    } else if (key.rightArrow) {
+      setSelectedField(Math.min(selectedField + 1, fields.length - 1))
     } else if (key.return) {
       setInspect(!inspect)
     } else if (key.delete) {
@@ -350,13 +355,12 @@ function Main(props) {
         break
       }
       case '+': {
-        const { msg } = messages[matching.at(pos)] || {}
-        if (msg) {
-          const fn = (x) => x.msg === msg
-          fn.label = `msg == "${msg}"`
-          filters.push(fn)
-          rescan()
-        }
+        const field = fields[selectedField]
+        const value = fp.get(field, messages[matching.at(pos)])
+        const fn = (x) => fp.isEqual(fp.get(field, x), value)
+        fn.label = `${field} == ${JSON.stringify(value) ?? 'undefined'}`
+        filters.push(fn)
+        rescan()
         break
       }
       case 'c': {
@@ -384,57 +388,35 @@ function Main(props) {
 
   const data = []
 
-  const start = Math.max(pos - Math.floor(numLines / 2), -1)
+  const start = Math.max(pos - Math.floor(numLines / 2), 0)
   for (let linePos = start; linePos < start + numLines; ++linePos) {
-    if (linePos < 0 || linePos >= matching.length) {
+    if (linePos >= matching.length) {
       continue
     }
-    const {
-      time,
-      level,
-      msg = '',
-      name,
-      pid,
-      hostname,
-      ...rest
-    } = messages[matching.at(linePos)] || {}
-    data.push([
-      formatTime(time),
-      formatLevel(level),
-      name ?? '-',
-      msg,
-      ...fields.map((field) => {
-        const value = fp.get(field, rest)
-        if (typeof value === 'string') {
+    const msg = messages[matching.at(linePos)] || {}
+    data.push(
+      fields.map((field) => {
+        const value = fp.get(field, msg)
+        if (field === 'time') {
+          return formatTime(value)
+        } else if (field === 'level') {
+          return formatLevel(value)
+        } else if (typeof value === 'string') {
           return value
         } else {
-          return JSON.stringify(value) ?? '-'
+          return JSON.stringify(value) ?? ' '
         }
-      }),
-    ])
+      })
+    )
   }
 
   const widths = Array.from({ length: data.at(0)?.length ?? 0 }, (_, col) =>
-    data.reduce((max, line) => Math.max(max, line[col]?.length ?? 0), 0)
+    data.reduce((max, line) => Math.max(max, line[col].length ?? 0), 0)
   )
-  const remainingColumns = columns - widths.reduce((xs, x) => xs + x, 0) + (widths[3] ?? 0)
-  const msgWidth = Math.min(widths[3], Math.max(remainingColumns, Math.round(columns * 0.25)))
 
   let lineIndex = 0
   const lines = []
   for (let linePos = start; linePos < start + numLines; ++linePos) {
-    if (linePos < 0) {
-      if (linePos === -1) {
-        lines.push(
-          <Box marginLeft={widths[0] + widths[1] + 2}>
-            <Text color='blue' dimColor>
-              [start of file]
-            </Text>
-          </Box>
-        )
-      }
-      continue
-    }
     if (linePos >= matching.length) {
       if (linePos === matching.length) {
         lines.push(
@@ -445,34 +427,20 @@ function Main(props) {
       }
       continue
     }
-    const [time, level, name, msg, ...cols] = data.at(lineIndex++)
+    const cols = data.at(lineIndex++)
     lines.push(
       <Box key={matching.at(linePos)} flexWrap='nowrap' gap='1'>
-        <Box width={widths[0]} flexShrink={0}>
-          <Text wrap='truncate' dimColor>
-            {time}
-          </Text>
-        </Box>
-        <Box width={widths[1]} flexShrink={0}>
-          <Text wrap='truncate' {...levelProps(messages[matching.at(linePos)]?.level)}>
-            {level}
-          </Text>
-        </Box>
-        <Box width={widths[2]} flexShrink={0}>
-          <Text wrap='truncate'>{name}</Text>
-        </Box>
-        <Box width={msgWidth} flexShrink={0}>
-          <Text
-            wrap='truncate'
-            color={selected.includes(matching.at(linePos)) ? 'blue' : null}
-            inverse={linePos === pos}
-          >
-            {msg}
-          </Text>
-        </Box>
         {cols.map((col, idx) => (
-          <Box width={widths[4 + idx]} flexShrink={1}>
-            <Text wrap='truncate' dimColor>
+          <Box key={idx} width={widths[idx]} flexShrink={idx <= 3 ? 0 : 1}>
+            <Text
+              wrap='truncate'
+              dimColor={linePos !== pos}
+              color={selected.includes(matching.at(linePos)) ? 'blue' : null}
+              inverse={linePos === pos && selectedField === idx}
+              {...(fields[idx] === 'level'
+                ? levelProps(messages[matching.at(linePos)]?.level)
+                : {})}
+            >
               {col}
             </Text>
           </Box>
@@ -480,14 +448,17 @@ function Main(props) {
       </Box>
     )
   }
-  const { time, level, name, msg, pid, hostname, ...rest } = messages[matching.at(pos)] ?? {}
+
+  const rest = messages[matching.at(pos)] ?? {}
 
   return (
     <Box flexDirection='column' height={rows} width={columns}>
       <Box gap='1' flexWrap='nowrap'>
         <Text wrap='truncate-middle'>Line: {matching.at(pos)}</Text>
         <Text>Matching: {matching.length}</Text>
-        {scan !== messages.length ? <Text>Scanned: {scan}</Text> : null}
+        {scan !== messages.length ? (
+          <Text>Scanned: {Number((scan / messages.length) * 100).toFixed(1)}%</Text>
+        ) : null}
         <Text>Total: {messages.length}</Text>
         <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
       </Box>
@@ -501,24 +472,14 @@ function Main(props) {
         flexGrow={inspect ? 0 : 2}
       >
         <Box flexWrap='nowrap' gap='1'>
-          <Box width={widths[0]} flexShrink={0}>
-            <Text dimColor wrap='truncate'>
-              Date
-            </Text>
-          </Box>
-          <Box width={widths[1]} flexShrink={0}>
-            <Text dimColor wrap='truncate'>
-              Level
-            </Text>
-          </Box>
-          <Box width={widths[2]} height={1} overflowY='hidden'>
-            <Text dimColor>Name</Text>
-          </Box>
-          <Box width={msgWidth} flexShrink={0} height={1} overflowY='hidden'>
-            <Text dimColor>Message</Text>
-          </Box>
           {fields.map((field, idx) => (
-            <Box key={idx} width={widths[4 + idx]} flexShrink={1}>
+            <Box
+              key={idx}
+              width={widths[idx]}
+              flexShrink={idx <= 3 ? 0 : 1}
+              height={1}
+              overflowY='hidden'
+            >
               <Text wrap='truncate' dimColor>
                 {field}
               </Text>
