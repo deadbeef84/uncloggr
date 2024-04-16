@@ -658,7 +658,7 @@ function App() {
             }
           }
           ++scan
-          if (Date.now() - start > 200) {
+          if (Date.now() - start > 100) {
             break
           }
         }
@@ -673,8 +673,8 @@ function App() {
           completed,
           rescan,
         }))
+        await tp.setTimeout(20)
         if (scan < messages.length) {
-          await tp.setTimeout(10)
           continue
         }
         // wait for resume...
@@ -753,6 +753,6 @@ function parseLine(row) {
   try {
     if (row) return JSON.parse(row)
   } catch (err) {
-    return { msg: row, err, level: 100 }
+    return { msg: row, level: 100 }
   }
 }

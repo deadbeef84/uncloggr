@@ -1,14 +1,21 @@
 {
-  "name": "pino-tui",
+  "name": "uncloggr",
   "version": "1.0.0",
   "main": "index.mjs",
   "bin": {
-    "pino-tui": "./dist/index.mjs"
+    "uncloggr": "./dist/index.mjs"
   },
   "scripts": {
     "build": "babel --keep-file-extension --out-dir dist *.mjs",
     "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs",
     "postinstall": "patch-package"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "semi": false,
+    "singleQuote": true,
+    "jsxSingleQuote": true,
+    "trailingComma": "es5"
   },
   "dependencies": {
     "ink": "^4.4.1",
