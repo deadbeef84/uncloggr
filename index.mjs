@@ -252,17 +252,17 @@ function Main(props) {
     }
 
     // upArrow downArrow leftArrow rightArrow pageDown pageUp return escape ctrl shift tab backspace delete meta
-    if (key.upArrow) {
+    if (key.upArrow || input === 'k') {
       setPosition(Math.max(pos - 1, 0))
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === 'j') {
       setPosition(Math.min(pos + 1, matching.length - 1))
-    } else if (key.pageUp) {
+    } else if (key.pageUp || (key.ctrl && input === 'u')) {
       setPosition(Math.max(pos - numLines, 0))
-    } else if (key.pageDown) {
+    } else if (key.pageDown || (key.ctrl && input === 'd')) {
       setPosition(Math.min(pos + numLines, matching.length - 1))
-    } else if (key.leftArrow) {
+    } else if (key.leftArrow || input === 'h') {
       setSelectedField(Math.max(selectedField - 1, 0))
-    } else if (key.rightArrow) {
+    } else if (key.rightArrow || input === 'l') {
       setSelectedField(Math.min(selectedField + 1, fields.length - 1))
     } else if (key.return) {
       setInspect(!inspect)
