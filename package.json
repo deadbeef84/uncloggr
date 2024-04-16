@@ -1,9 +1,9 @@
 {
   "name": "uncloggr",
   "version": "0.0.1",
-  "main": "./dist/index.mjs",
+  "main": "dist/index.mjs",
   "bin": {
-    "uncloggr": "./dist/index.mjs"
+    "uncloggr": "dist/index.mjs"
   },
   "files": [
     "dist/*",
