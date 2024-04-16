@@ -1,10 +1,14 @@
 {
   "name": "uncloggr",
   "version": "0.0.1",
-  "main": "index.mjs",
+  "main": "./dist/index.mjs",
   "bin": {
     "uncloggr": "./dist/index.mjs"
   },
+  "files": [
+    "dist/*",
+    "patches/*"
+  ],
   "scripts": {
     "build": "babel --keep-file-extension --out-dir dist *.mjs",
     "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs",
