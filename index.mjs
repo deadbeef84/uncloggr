@@ -7,7 +7,7 @@ import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
 import { formatLevel, formatObject, formatTime } from './format.mjs'
-import { render, Text, Box, useApp, useInput, measureElement } from 'ink'
+import { render, Text, Box, Spacer, useApp, useInput, measureElement } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
 import { execFileSync, spawn } from 'node:child_process'
@@ -299,6 +299,9 @@ function Main(props) {
         rescan()
         break
       }
+      case '\\':
+        setFields(fields.toSpliced(selectedField, 1))
+        break
       case '*': {
         setPrompt({
           label: 'Add Field',
@@ -456,12 +459,13 @@ function Main(props) {
   return (
     <Box flexDirection='column' height={rows} width={columns}>
       <Box gap='1' flexWrap='nowrap'>
-        <Text wrap='truncate-middle'>Line: {matching.at(pos)}</Text>
+        <Text wrap='truncate-middle'>Line: {matching.at(pos) + 1}</Text>
         <Text>Matching: {matching.length}</Text>
         {scan !== messages.length ? (
           <Text>Scanned: {Number((scan / messages.length) * 100).toFixed(1)}%</Text>
         ) : null}
         <Text>Total: {messages.length}</Text>
+        <Spacer />
         <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
       </Box>
       <Box
@@ -501,7 +505,6 @@ function Main(props) {
       >
         {formatObject(rest, { lineWidth: columns - 4 })}
       </ScrollBox>
-      <Text>{filters.map((fn) => fn.label ?? fn.toString()).join(' & ')}</Text>
       {prompt ? (
         <Box>
           <Text>{prompt.label}: </Text>
@@ -514,8 +517,21 @@ function Main(props) {
               setPrompt(null)
             }}
           />
+          <Spacer />
+          <Text>.</Text>
         </Box>
-      ) : null}
+      ) : (
+        <Box>
+          <Text>
+            {filters
+              .map((fn) => fn.label ?? fn.toString())
+              .filter(Boolean)
+              .join(' & ') || 'No filters'}
+          </Text>
+          <Spacer />
+          <Text>.</Text>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -693,15 +709,17 @@ function App() {
   return <Main {...state} />
 }
 
-// const enterAltScreenCommand = '\x1b[?1049h'
-// const leaveAltScreenCommand = '\x1b[?1049l'
+const enterAltScreenCommand = '\x1b[?1049h'
+const leaveAltScreenCommand = '\x1b[?1049l'
 
+process.stdout.write(enterAltScreenCommand)
 const { waitUntilExit } = render(
   <App columns={process.stdout.columns} rows={process.stdout.rows} />,
   { stdin: input }
 )
 
 await waitUntilExit()
+process.stdout.write(leaveAltScreenCommand)
 
 // input.setRawMode(false)
 // input.destroy()
