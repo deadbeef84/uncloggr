@@ -325,6 +325,22 @@ function Main(props) {
         })
         break
       }
+      case '=': {
+        const field = fields[selectedField]
+        setQuery(`this.${field}`)
+        setPrompt({
+          label: 'Expression',
+          onSubmit: (query) => {
+            const filterFn = function (msg) {
+              return eval(query)
+            }
+            filterFn.label = query
+            filters.push(filterFn)
+            rescan()
+          },
+        })
+        break
+      }
       case '1':
         filters[0] = filterTrace
         rescan()
@@ -623,7 +639,7 @@ function App() {
         const start = Date.now()
         while (scan < messages.length) {
           const message = messages[scan]
-          if (filters.every((fn) => fn(message))) {
+          if (filters.every((fn) => fn.call(message, message))) {
             if (sort) {
               const idx = fp.sortedIndexBy((idx) => messages[idx].time, scan, matching)
               matching.splice(idx, 0, scan)
