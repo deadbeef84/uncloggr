@@ -451,7 +451,12 @@ function Main(props) {
     lines.push(
       <Box key={matching.at(linePos)} flexWrap='nowrap' gap='1'>
         {cols.map((col, idx) => (
-          <Box key={idx} width={widths[idx]} flexShrink={idx <= 3 ? 0 : 1}>
+          <Box
+            key={idx}
+            width={widths[idx]}
+            flexShrink={['time', 'level', 'name'].includes(fields[idx]) ? 0 : 1}
+            flexGrow={fields[idx] === 'msg'}
+          >
             <Text
               wrap='truncate'
               dimColor={linePos !== pos}
@@ -497,9 +502,11 @@ function Main(props) {
             <Box
               key={idx}
               width={widths[idx]}
-              flexShrink={idx <= 3 ? 0 : 1}
+              flexShrink={['time', 'level', 'name'].includes(field) ? 0 : 1}
+              flexGrow={field === 'msg' ? 1 : 0}
               height={1}
               overflowY='hidden'
+              overflowX='hidden'
             >
               <Text wrap='truncate' dimColor>
                 {field}
