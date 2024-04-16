@@ -366,13 +366,12 @@ function Main(props) {
         rescan()
         break
       case '-': {
-        const { msg } = messages[matching.at(pos)] || {}
-        if (msg) {
-          const fn = (x) => x.msg !== msg
-          fn.label = `msg != "${msg}"`
-          filters.push(fn)
-          rescan()
-        }
+        const field = fields[selectedField]
+        const value = fp.get(field, messages[matching.at(pos)])
+        const fn = (x) => !fp.isEqual(fp.get(field, x), value)
+        fn.label = `${field} != ${JSON.stringify(value) ?? 'undefined'}`
+        filters.push(fn)
+        rescan()
         break
       }
       case '+': {
