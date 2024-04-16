@@ -181,6 +181,8 @@ function levelProps(level) {
   }
 }
 
+const filterNull = () => true
+filterNull.label = ''
 const filterTrace = (x) => x.level >= 10
 filterTrace.label = 'LEVEL>=TRACE'
 const filterDebug = (x) => x.level >= 20
@@ -266,7 +268,7 @@ function Main(props) {
       setInspect(!inspect)
     } else if (key.delete) {
       filters.length = 1
-      filters[0] = () => true
+      filters[0] = filterNull
       rescan()
     }
 
@@ -587,7 +589,7 @@ function App() {
     let status = 'starting...'
     const messages = []
     const matching = []
-    const filters = [() => true]
+    const filters = [filterNull]
 
     let scanPosition
     let scanToDate
