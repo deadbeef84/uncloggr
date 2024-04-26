@@ -422,7 +422,7 @@ function Main(props) {
         } else if (field === 'level') {
           return formatLevel(value)
         } else if (typeof value === 'string') {
-          return value
+          return value.replace(/\n/g, '\\n')
         } else {
           return JSON.stringify(value) ?? ' '
         }
