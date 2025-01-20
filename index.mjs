@@ -55,7 +55,11 @@ if (opts.from === 'pm2') {
       env.PATH = [path.dirname(pm2), env.PATH].filter(Boolean).join(path.delimiter)
       break
     }
+    const prev = p
     p = path.dirname(p)
+    if (prev === p) {
+      break
+    }
   }
 
   let procs = argv
