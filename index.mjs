@@ -270,9 +270,13 @@ function Main(props) {
       setSelectedField(Math.min(selectedField + 1, fields.length - 1))
     } else if (key.return) {
       setInspect(!inspect)
-    } else if (key.delete) {
-      filters.length = 1
-      filters[0] = filterNull
+    } else if (key.delete || key.backspace) {
+      if (key.meta || filters.length === 1) {
+        filters.length = 1
+        filters[0] = filterNull
+      } else {
+        filters.pop()
+      }
       rescan()
     }
 
