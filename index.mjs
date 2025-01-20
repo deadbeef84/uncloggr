@@ -218,7 +218,7 @@ function Main(props) {
   } = props
 
   const { exit } = useApp()
-  const [position, setPosition] = React.useState(0) // undefined = last, null = scanPosition
+  const [position, setPosition] = React.useState(undefined) // undefined = last, null = scanPosition
   const [fields, setFields] = React.useState(['time', 'level', 'name', 'msg'])
   const [selectedField, setSelectedField] = React.useState(3)
   const [inspect, setInspect] = React.useState()
