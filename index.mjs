@@ -156,7 +156,7 @@ function Main(props) {
   const [numLines, setNumLines] = React.useState(0)
   React.useEffect(() => {
     const { height } = measureElement(ref.current)
-    setNumLines(height - 3) // remove borders + headers
+    setNumLines(height - 2) // excluding header + borders
   })
 
   function rescan() {
@@ -414,26 +414,14 @@ function Main(props) {
 
   return (
     <Box flexDirection='column' height={rows} width={columns}>
-      <Box gap='1' flexWrap='nowrap'>
-        <Text wrap='truncate-middle'>Line: {matching.at(pos) + 1}</Text>
-        <Text>Matching: {matching.length}</Text>
-        {scan !== messages.length ? (
-          <Text>Scanned: {Number((scan / messages.length) * 100).toFixed(1)}%</Text>
-        ) : null}
-        <Text>Total: {messages.length}</Text>
-        <Spacer />
-        <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
-      </Box>
       <Box
         ref={ref}
-        borderStyle='round'
-        borderColor={inspect ? '' : 'blue'}
         flexDirection='column'
         flexWrap='nowrap'
         flexBasis={4}
         flexGrow={inspect ? 0 : 2}
       >
-        <Box flexWrap='nowrap' gap='1'>
+        <Box flexWrap='nowrap' gap='1' borderStyle='single' borderLeft={false} borderRight={false} borderTop={false}>
           {fields.map((field, idx) => (
             <Box
               key={idx}
@@ -455,7 +443,9 @@ function Main(props) {
       <ScrollBox
         key={matching[pos]}
         focus={inspect}
-        borderStyle='round'
+        borderStyle='double'
+        borderLeft={false}
+        borderRight={false}
         borderColor={inspect ? 'blue' : ''}
         overflow='hidden'
         flexBasis={0}
@@ -479,7 +469,7 @@ function Main(props) {
           <Text>.</Text>
         </Box>
       ) : (
-        <Box>
+        <Box gap='1'>
           <Text>
             {filters
               .map((fn) => fn.label ?? fn.toString())
@@ -487,7 +477,14 @@ function Main(props) {
               .join(' & ') || 'No filters'}
           </Text>
           <Spacer />
-          <Text>.</Text>
+          <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
+          <Spacer />
+          <Text wrap='truncate-middle'>Line: {matching.at(pos) + 1}</Text>
+          <Text>Matching: {matching.length}</Text>
+          {scan !== messages.length ? (
+            <Text>Scanned: {Number((scan / messages.length) * 100).toFixed(1)}%</Text>
+          ) : null}
+          <Text>Total: {messages.length}</Text>
         </Box>
       )}
     </Box>
