@@ -2,7 +2,6 @@
 import { pipeline } from 'node:stream/promises'
 import split from 'split2'
 import fs from 'node:fs'
-import path from 'node:path'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
@@ -10,163 +9,90 @@ import { formatLevel, formatObject, formatTime } from './format.mjs'
 import { render, Text, Box, Spacer, useApp, useInput, measureElement } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
-import { execFileSync, spawn } from 'node:child_process'
 import inquirer from 'inquirer'
 import { parseArgs } from 'node:util'
+import { getDocker, getDockerServices, getFile, getPM2, getStdin } from './sources.mjs'
 
 const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 'answer' }])).answer
 
 const { values: opts, positionals: argv } = parseArgs({
   options: {
-    from: {
-      type: 'string',
+    follow: {
+      type: 'boolean',
       short: 'f',
+      default: true,
+    },
+    since: {
+      type: 'string',
     },
     tail: {
       type: 'string',
-      short: 't',
+      short: 'n',
     },
     sort: {
       type: 'boolean',
       short: 's',
+      default: true,
     },
   },
   allowPositionals: true,
   strict: true,
 })
 
-let inputs
+const sources = argv.length ? argv : process.stdin.isTTY ? [''] : ['stdin:-']
+const inputs = []
 
-if (!opts.from && !argv.length && process.stdin.isTTY) {
-  opts.from = await prompt({
-    type: 'list',
-    message: 'From?',
-    choices: ['pm2', 'docker', 'docker-service', 'file'],
-  })
+const types = {
+  pm2: getPM2,
+  docker: getDocker,
+  'docker-service': getDockerServices,
+  file: getFile,
+  stdin: getStdin,
 }
 
-if (opts.from === 'pm2') {
-  const env = { ...process.env }
-
-  let p = process.cwd()
-  while (p) {
-    const pm2 = path.join(p, 'node_modules', '.bin', 'pm2')
-    if (fs.existsSync(pm2)) {
-      env.PATH = [path.dirname(pm2), env.PATH].filter(Boolean).join(path.delimiter)
-      break
-    }
-    const prev = p
-    p = path.dirname(p)
-    if (prev === p) {
-      break
-    }
-  }
-
-  let procs = argv
-  if (!procs.length) {
-    const processes = JSON.parse(
-      execFileSync('pm2', ['jlist'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env })
-    )
-
-    procs = await prompt({
-      type: 'checkbox',
-      message: 'What processes?',
-      choices: processes.map(({ name }) => name),
-    })
-  }
-
-  inputs = procs.flatMap((name) => {
-    const proc = spawn('pm2', ['logs', '--raw', '--lines', opts.tail ?? '1000', name], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    })
-    return [
-      Object.assign(proc.stdout, { label: name }),
-      Object.assign(proc.stderr, { label: `${name}:stderr` }),
-    ]
-  })
-} else if (opts.from === 'docker') {
-  let selected = argv
-  if (!selected.length) {
-    const containers = execFileSync(
-      'docker',
-      ['ps', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Names}}'],
-      { encoding: 'utf8' }
-    )
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => line.split('\t'))
-      .sort((a, b) => a[2].localeCompare(b[2]))
-
-    selected = await prompt({
-      type: 'checkbox',
-      message: 'What container?',
-      choices: containers.map(([id, image, name]) => ({
-        name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-        short: id,
-        value: id,
-      })),
-    })
-  }
-
-  if (selected.length > 1) {
-    opts.sort ??= true
-  }
-
-  inputs = selected.flatMap((container) => {
-    const dockerLogsProc = spawn('docker', ['logs', '-f', container], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    return [
-      Object.assign(dockerLogsProc.stdout, { label: container }),
-      Object.assign(dockerLogsProc.stderr, { label: `${container}:stderr` }),
-    ]
-  })
-} else if (opts.from === 'docker-service') {
-  opts.sort ??= true
-  const services = argv.length
-    ? argv
-    : await (async () => {
-        const services = execFileSync(
-          'docker',
-          ['service', 'ls', '--format', '{{.ID}}\\t{{.Image}}\\t{{.Name}}'],
-          { encoding: 'utf8' }
-        )
-          .trim()
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => line.split('\t'))
-          .sort((a, b) => a[2].localeCompare(b[2]))
-
-        return await prompt({
+for (const source of sources) {
+  const [, type, pattern] = source?.match(/^([a-z-]+:)?([^:]*)$/i) ?? []
+  const from = type
+    ? types[type.slice(0, -1)]?.(pattern) ?? []
+    : Object.entries(types).flatMap(([type, fn]) => {
+        try {
+          // docker-service is buggy, so skip...
+          if (type === 'docker-service') {
+            return []
+          }
+          return fn(pattern)?.map((x) => ({
+            ...x,
+            type,
+            value: `${type}:${x.value ?? x.name}`,
+          }))
+        } catch (err) {
+          console.log(`${type}: ${err.message}`)
+          return []
+        }
+      })
+  if (from.length === 1) {
+    inputs.push(...from[0].read(opts))
+  } else if (from.length > 1) {
+    let choice
+    while (!choice?.length) {
+      try {
+        choice = await prompt({
           type: 'checkbox',
-          message: 'What service?',
-          choices: services.map(([id, image, name]) => ({
-            name: `${name.match(/^[\w-]+\.\d+/) || name} ${image}`,
-            short: id,
-            value: id,
-          })),
+          message: 'From where?',
+          choices: from.sort((a, b) => a.name.localeCompare(b.name)),
+          validate: (answers) => answers.length ? true : 'You must select a source',
         })
-      })()
-
-  inputs = services.flatMap((service) => {
-    const proc = spawn('docker', ['service', 'logs', '--raw', '--follow', service], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    return [
-      Object.assign(proc.stdout, { label: `${service}:stdout` }),
-      Object.assign(proc.stderr, { label: `${service}:stderr` }),
-    ]
-  })
-} else if (argv.length) {
-  inputs = argv.map((path) => {
-    const stream = fs.createReadStream(path)
-    stream.label = path
-    return stream
-  })
-} else {
-  inputs = [Object.assign(process.stdin, { label: 'stdin' })]
+      } catch {
+        process.exit(1)
+      }
+    }
+    inputs.push(
+      ...from.filter((x) => choice.includes(x.value)).flatMap((source) => source.read(opts))
+    )
+  } else {
+    console.error('Source not found:', source)
+    process.exit(1)
+  }
 }
 
 function levelProps(level) {
