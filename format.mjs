@@ -42,3 +42,8 @@ export function formatLevel(level) {
 export function formatObject(obj, opts) {
   return YAML.stringify(obj, { blockQuote: 'literal', aliasDuplicateObjects: false, ...opts })
 }
+
+const nf = Intl.NumberFormat()
+export function formatNumber(value) {
+  return nf.format(value)
+}

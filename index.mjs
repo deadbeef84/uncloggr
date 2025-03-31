@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
-import { formatLevel, formatObject, formatTime } from './format.mjs'
+import { formatLevel, formatNumber, formatObject, formatTime } from './format.mjs'
 import { render, Text, Box, Spacer, useApp, useInput, measureElement } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
@@ -357,6 +357,8 @@ function Main(props) {
           return formatLevel(value)
         } else if (typeof value === 'string') {
           return JSON.stringify(value).slice(1, -1)
+        } else if (typeof value === 'number') {
+          return formatNumber(value)
         } else {
           return JSON.stringify(value) ?? ' '
         }
