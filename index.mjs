@@ -627,8 +627,13 @@ function App() {
           input,
           split(parseLine),
           async (msgs) => {
+            let prevTime = idx
             for await (const msg of msgs) {
-              msg.time ??= 0
+              if ('time' in msg) {
+                prevTime = msg.time
+              } else {
+                msg.time = prevTime
+              }
               messages.push(inputs.length > 1 ? { ...msg, _from: input.label ?? idx } : msg)
               if (resume) {
                 setImmediate(resume)
