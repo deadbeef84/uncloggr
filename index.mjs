@@ -32,7 +32,6 @@ const { values: opts, positionals: argv } = parseArgs({
     sort: {
       type: 'boolean',
       short: 's',
-      default: true,
     },
   },
   allowPositionals: true,
@@ -134,17 +133,17 @@ function Main(props) {
   const {
     rows,
     columns,
-    scanPosition,
     scan,
     status,
     messages,
     matching,
     filters,
-    rescan: rescan2,
+    rescan,
+    sorted,
   } = props
 
   const { exit } = useApp()
-  const [position, setPosition] = React.useState(undefined) // undefined = last, null = scanPosition
+  const [item, setItem] = React.useState(undefined) // undefined = last
   const [fields, setFields] = React.useState(['time', 'level', 'name', 'msg'])
   const [selectedField, setSelectedField] = React.useState(3)
   const [inspect, setInspect] = React.useState()
@@ -159,14 +158,32 @@ function Main(props) {
     setNumLines(height - 2) // excluding header + borders
   })
 
-  function rescan() {
-    rescan2(new Date(messages[matching.at(position ?? scanPosition)]?.time))
-    setPosition(null)
+  function getPosition() {
+    if (item === undefined) {
+      return matching.length - 1
+    } else if (item) {
+      let idx = matching.findIndex((idx) => messages[idx] === item)
+      if (idx === -1) {
+        if (sorted) {
+          idx = matching.findIndex((index) => messages[index]._sort > item._sort)
+        } else {
+          let messagesIdx = messages.indexOf(item)
+          idx = matching.findIndex((idx) => idx > messagesIdx)
+        }
+      }
+      return idx === -1 ? matching.length - 1 : idx
+    }
+    return 0
   }
 
-  const pos = (position === null ? scanPosition : position) ?? matching.length - 1
+  function move (rel) {
+    const pos = Math.max(0, Math.min(matching.length - 1, getPosition() + rel))
+    setItem(messages[matching[pos]])
+  }
 
   useInput((input, key) => {
+    const pos = getPosition()
+
     if (prompt) {
       if (key.escape) {
         setPrompt(null)
@@ -183,13 +200,13 @@ function Main(props) {
 
     // upArrow downArrow leftArrow rightArrow pageDown pageUp return escape ctrl shift tab backspace delete meta
     if (key.upArrow || input === 'k') {
-      setPosition(Math.max(pos - 1, 0))
+      move(-1)
     } else if (key.downArrow || input === 'j') {
-      setPosition(Math.min(pos + 1, matching.length - 1))
+      move(1)
     } else if (key.pageUp || (key.ctrl && input === 'u')) {
-      setPosition(Math.max(pos - numLines, 0))
+      move(-numLines)
     } else if (key.pageDown || (key.ctrl && input === 'd')) {
-      setPosition(Math.min(pos + numLines, matching.length - 1))
+      move(numLines)
     } else if (key.leftArrow || input === 'h') {
       setSelectedField(Math.max(selectedField - 1, 0))
     } else if (key.rightArrow || input === 'l') {
@@ -212,20 +229,20 @@ function Main(props) {
           const item = matching[pos]
           const idx = selected.indexOf(item)
           if (idx === -1) {
-            return [...selected, item].sort((a, b) => a - b)
+            return [...selected, item]
           } else {
-            return [...selected.slice(0, idx), ...selected.slice(idx + 1)]
+            return selected.toSpliced(idx, 1)
           }
         })
         break
       case 'm': {
-        const next = matching.findIndex((x, idx) => idx > pos && selected.includes(x))
-        setPosition(next !== -1 ? next : undefined)
+        const idx = matching.find((x, idx) => idx > pos && selected.includes(x))
+        setItem(idx !== undefined ? messages[idx] : undefined)
         break
       }
       case 'M': {
-        const next = matching.slice(0, pos).findLastIndex((x) => selected.includes(x))
-        setPosition(next !== -1 ? next : 0)
+        const idx = matching.slice(0, pos).findLast((x) => selected.includes(x))
+        setItem(idx !== undefined ? messages[idx] : messages[matching[0]])
         break
       }
       case 's': {
@@ -323,15 +340,15 @@ function Main(props) {
         break
       }
       case 'g': {
-        setPosition(0)
+        setItem(messages[matching.at(0)])
         break
       }
       case 'F': {
-        setPosition(undefined)
+        setItem(undefined)
         break
       }
       case 'G': {
-        setPosition(matching.length - 1)
+        setItem(messages[matching.at(-1)])
         break
       }
       case 'q': {
@@ -342,6 +359,7 @@ function Main(props) {
 
   const data = []
 
+  let pos = getPosition()
   const start = Math.max(pos - Math.floor(numLines / 2), 0)
   for (let linePos = start; linePos < start + numLines; ++linePos) {
     if (linePos >= matching.length) {
@@ -562,14 +580,8 @@ function App() {
     const matching = []
     const filters = [filterNull]
 
-    let scanPosition
-    let scanToDate
-    function rescan(date) {
-      if (date) {
-        scanToDate = date
-      }
+    function rescan() {
       scan = matching.length = 0
-      scanPosition = undefined
       resume?.()
     }
 
@@ -585,10 +597,6 @@ function App() {
             } else {
               matching.push(scan)
             }
-            if (scanPosition === undefined && scanToDate && new Date(message.time) >= scanToDate) {
-              scanPosition = matching.length - 1
-              scanToDate = null
-            }
           }
           ++scan
           if (Date.now() - start > 100) {
@@ -597,7 +605,7 @@ function App() {
         }
         setState((state) => ({
           ...state,
-          scanPosition,
+          sorted: sort,
           scan,
           status,
           messages,
