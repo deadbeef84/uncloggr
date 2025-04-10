@@ -250,8 +250,10 @@ function Main(props) {
         break
       }
       case 's': {
+        const selectedItems = selected.map((idx) => messages[idx])
         messages.sort((a, b) => a._sort.localeCompare(b._sort))
         rescan()
+        setSelected(selectedItems.map((item) => messages.indexOf(item)))
         break
       }
       case '\\':
