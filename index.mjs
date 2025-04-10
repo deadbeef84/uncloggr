@@ -229,7 +229,7 @@ function Main(props) {
         break
       }
       case 's': {
-        messages.sort((a, b) => new Date(a.time) - new Date(b.time))
+        messages.sort((a, b) => a._sort.localeCompare(b._sort))
         rescan()
         break
       }
@@ -580,7 +580,7 @@ function App() {
           const message = messages[scan]
           if (filters.every((fn) => fn.call(message, message))) {
             if (sort) {
-              const idx = fp.sortedIndexBy((idx) => messages[idx].time, scan, matching)
+              const idx = fp.sortedIndexBy((idx) => messages[idx]._sort, scan, matching)
               matching.splice(idx, 0, scan)
             } else {
               matching.push(scan)
@@ -627,14 +627,17 @@ function App() {
           input,
           split(parseLine),
           async (msgs) => {
-            let prevTime = idx
+            let time = 0
+            let line = 0
             for await (const msg of msgs) {
+              ++line
               if ('time' in msg) {
-                prevTime = msg.time
-              } else {
-                msg.time = prevTime
+                time = new Date(msg.time).getTime() || 0
               }
-              messages.push(inputs.length > 1 ? { ...msg, _from: input.label ?? idx } : msg)
+              msg._sort = `${String(time).padStart(13, '0')}:${String(idx).padStart(4, '0')}:${String(line).padStart(9, '0')}`
+              msg._from = input.label ?? idx
+              msg._line = line
+              messages.push(msg)
               if (resume) {
                 setImmediate(resume)
                 resume = null
