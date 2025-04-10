@@ -445,7 +445,14 @@ function Main(props) {
         flexBasis={4}
         flexGrow={inspect ? 0 : 2}
       >
-        <Box flexWrap='nowrap' gap='1' borderStyle='single' borderLeft={false} borderRight={false} borderTop={false}>
+        <Box
+          flexWrap='nowrap'
+          gap='1'
+          borderStyle='single'
+          borderLeft={false}
+          borderRight={false}
+          borderTop={false}
+        >
           {fields.map((field, idx) => (
             <Box
               key={idx}
@@ -464,10 +471,16 @@ function Main(props) {
         </Box>
         {lines}
       </Box>
+      <Text>
+        {Array.from({ length: columns }, (_, idx) =>
+          idx / columns > scan / messages.length ? '-' : '═'
+        ).join('')}
+      </Text>
       <ScrollBox
         key={matching[pos]}
         focus={inspect}
         borderStyle='double'
+        borderTop={false}
         borderLeft={false}
         borderRight={false}
         borderColor={inspect ? 'blue' : ''}
@@ -503,11 +516,7 @@ function Main(props) {
           <Spacer />
           <Text>Mem: {Math.round(process.memoryUsage().rss / 1e6)} MB</Text>
           <Spacer />
-          <Text wrap='truncate-middle'>Line: {matching.at(pos) + 1}</Text>
           <Text>Matching: {matching.length}</Text>
-          {scan !== messages.length ? (
-            <Text>Scanned: {Number((scan / messages.length) * 100).toFixed(1)}%</Text>
-          ) : null}
           <Text>Total: {messages.length}</Text>
         </Box>
       )}
