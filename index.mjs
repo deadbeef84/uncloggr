@@ -17,6 +17,10 @@ const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 
 
 const { values: opts, positionals: argv } = parseArgs({
   options: {
+    all: {
+      type: 'boolean',
+      short: 'a',
+    },
     follow: {
       type: 'boolean',
       short: 'f',
@@ -52,14 +56,14 @@ const types = {
 for (const source of sources) {
   const [, type, pattern] = source?.match(/^([a-z-]+:)?([^:]*)$/i) ?? []
   const from = type
-    ? types[type.slice(0, -1)]?.(pattern) ?? []
+    ? types[type.slice(0, -1)]?.(pattern, opts) ?? []
     : Object.entries(types).flatMap(([type, fn]) => {
         try {
           // docker-service is buggy, so skip...
           if (type === 'docker-service') {
             return []
           }
-          return fn(pattern)?.map((x) => ({
+          return fn(pattern, opts)?.map((x) => ({
             ...x,
             type,
             value: `${type}:${x.value ?? x.name}`,

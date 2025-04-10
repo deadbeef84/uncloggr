@@ -3,6 +3,10 @@ import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 
 export function getPM2(pattern) {
+  if (pattern.includes('/')) {
+    return []
+  }
+  
   const env = { ...process.env }
 
   let p = process.cwd()
@@ -53,8 +57,16 @@ export function getPM2(pattern) {
     }))
 }
 
-export function getDocker(pattern) {
-  return execFileSync('docker', ['ps', '--format', 'json'], { encoding: 'utf8' })
+export function getDocker(pattern, opts) {
+  if (pattern.includes('/')) {
+    return []
+  }
+
+  return execFileSync(
+    'docker',
+    ['ps', '--format', 'json', opts.all ? '-a' : null].filter(Boolean),
+    { encoding: 'utf8' }
+  )
     .trim()
     .split('\n')
     .filter(Boolean)
@@ -93,6 +105,10 @@ export function getDocker(pattern) {
 }
 
 export function getDockerServices(pattern) {
+  if (pattern.includes('/')) {
+    return []
+  }
+  
   return execFileSync('docker', ['service', 'ls', '--format', 'json'], { encoding: 'utf8' })
     .trim()
     .split('\n')
