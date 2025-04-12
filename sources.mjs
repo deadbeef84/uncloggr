@@ -6,7 +6,7 @@ export function getPM2(pattern) {
   if (pattern.includes('/')) {
     return []
   }
-  
+
   const env = { ...process.env }
 
   let p = process.cwd()
@@ -25,7 +25,7 @@ export function getPM2(pattern) {
 
   let jlist
   try {
-    jlist = execFileSync('pm2', ['jlist'], {
+    jlist = execFileSync('pm2', ['jlist', '--silent'], {
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
       env,
@@ -36,9 +36,7 @@ export function getPM2(pattern) {
     }
     throw err
   }
-  const start = jlist.indexOf('[')
-  const end = jlist.lastIndexOf(']')
-  const processes = JSON.parse(jlist.slice(start, end + 1))
+  const processes = JSON.parse(jlist)
 
   return processes
     .filter(({ name }) => !pattern || name.includes(pattern))
@@ -108,7 +106,7 @@ export function getDockerServices(pattern) {
   if (pattern.includes('/')) {
     return []
   }
-  
+
   return execFileSync('docker', ['service', 'ls', '--format', 'json'], { encoding: 'utf8' })
     .trim()
     .split('\n')
