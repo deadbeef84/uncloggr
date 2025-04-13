@@ -62,7 +62,7 @@ export function getDocker(pattern, opts) {
 
   return execFileSync(
     'docker',
-    ['ps', '--format', 'json', opts.all ? '-a' : null].filter(Boolean),
+    ['ps', '--format', '{{ json . }}', opts.all ? '-a' : null].filter(Boolean),
     { encoding: 'utf8' }
   )
     .trim()
@@ -107,7 +107,7 @@ export function getDockerServices(pattern) {
     return []
   }
 
-  return execFileSync('docker', ['service', 'ls', '--format', 'json'], { encoding: 'utf8' })
+  return execFileSync('docker', ['service', 'ls', '--format', '{{ json . }}'], { encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
