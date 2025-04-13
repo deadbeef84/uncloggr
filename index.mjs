@@ -2,6 +2,7 @@
 import { pipeline } from 'node:stream/promises'
 import split from 'split2'
 import fs from 'node:fs'
+import path from 'node:path'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
@@ -37,10 +38,40 @@ const { values: opts, positionals: argv } = parseArgs({
       type: 'boolean',
       short: 's',
     },
+    help: {
+      type: 'boolean',
+      short: 'h'
+    },
+    version: {
+      type: 'boolean',
+      short: 'v'
+    }
   },
   allowPositionals: true,
   strict: true,
 })
+
+if (opts.version) {
+  const pkg = JSON.parse((fs.readFileSync(path.resolve('./package.json'))))
+  console.log(`uncloggr version: ${pkg.version}`)
+  process.exit(0)
+}
+
+if (opts.help) {
+  console.log(`
+Usage: uncloggr [OPTIONS] [sources...]
+
+Options:
+  -a --all          Include all sources (stopped containers)
+  -f --follow       Follow log output
+     --since string Show logs since timestamp (e.g. "2013-01-02T13:23:37Z") or relative (e.g. "42m" for 42 minutes)
+  -n --tail string  Number of lines to show from the end of logs
+  -s --sort         Sort logs by time, slower but useful when reading multiple sources
+  -h --help         This help
+  -v --version
+`)
+  process.exit(0)
+}
 
 const sources = argv.length ? argv : process.stdin.isTTY ? [''] : ['stdin:-']
 const inputs = []
@@ -93,7 +124,7 @@ for (const source of sources) {
       ...from.filter((x) => choice.includes(x.value)).flatMap((source) => source.read(opts))
     )
   } else {
-    console.error('Source not found:', source)
+    console.error(source ? `Source not found: ${source}` : 'No source specified')
     process.exit(1)
   }
 }
