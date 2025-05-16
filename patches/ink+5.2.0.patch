@@ -11,3 +11,16 @@ index a9c444f..4598e02 100644
              this.lastOutput = output;
              return;
          }
+diff --git a/node_modules/ink/build/output.js b/node_modules/ink/build/output.js
+index 5f0dcf8..4bcf461 100644
+--- a/node_modules/ink/build/output.js
++++ b/node_modules/ink/build/output.js
+@@ -136,7 +136,7 @@ export default class Output {
+             .map(line => {
+             // See https://github.com/vadimdemedes/ink/pull/564#issuecomment-1637022742
+             const lineWithoutEmptyItems = line.filter(item => item !== undefined);
+-            return styledCharsToString(lineWithoutEmptyItems).trimEnd();
++            return styledCharsToString(lineWithoutEmptyItems)//.trimEnd();
+         })
+             .join('\n');
+         return {
