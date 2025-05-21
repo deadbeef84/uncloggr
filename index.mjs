@@ -185,6 +185,7 @@ function Main(props) {
   const [selected, setSelected] = React.useState([])
   const [prompt, setPrompt] = React.useState(null)
   const [query, setQuery] = React.useState('')
+  const [search, setSearch] = React.useState(null)
 
   const ref = React.useRef()
   const [numLines, setNumLines] = React.useState(0)
@@ -218,6 +219,16 @@ function Main(props) {
 
   useInput((input, key) => {
     const pos = getPosition()
+
+    function searchNext(query) {
+      if (!query) {
+        return
+      }
+
+      const searchFn = (msg) => JSON.stringify(msg).includes(query)
+      const idx = matching.find((x, idx) => idx > pos && searchFn(messages[x]))
+      setItem(idx !== undefined ? messages[idx] : undefined)
+    }
 
     if (prompt) {
       if (key.escape) {
@@ -301,7 +312,7 @@ function Main(props) {
         })
         break
       }
-      case '/': {
+      case '&': {
         setPrompt({
           label: 'Filter',
           onSubmit: (query) => {
@@ -311,6 +322,28 @@ function Main(props) {
             rescan()
           },
         })
+        break
+      }
+      case '/': {
+        setPrompt({
+          label: 'Search',
+          onSubmit: (query) => {
+            setSearch(query)
+            searchNext(query)
+          },
+        })
+        break
+      }
+      case 'n': {
+        searchNext(search)
+        break
+      }
+      case 'N': {
+        if (search) {
+          const searchFn = (msg) => JSON.stringify(msg).includes(search)
+          const idx = matching.slice(0, pos).findLast((x) => searchFn(messages[x]))
+          setItem(idx !== undefined ? messages[idx] : messages[matching[0]])
+        }
         break
       }
       case '=': {
