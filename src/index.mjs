@@ -2,7 +2,6 @@
 import { pipeline } from 'node:stream/promises'
 import split from 'split2'
 import fs from 'node:fs'
-import path from 'node:path'
 import tp from 'node:timers/promises'
 import tty from 'node:tty'
 import React from 'react'
@@ -52,7 +51,7 @@ const { values: opts, positionals: argv } = parseArgs({
 })
 
 if (opts.version) {
-  const pkg = JSON.parse((fs.readFileSync(path.resolve('./package.json'))))
+  const pkg = JSON.parse((fs.readFileSync(new URL('./package.json', import.meta.url))))
   console.log(`uncloggr version: ${pkg.version}`)
   process.exit(0)
 }

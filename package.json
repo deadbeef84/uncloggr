@@ -10,8 +10,8 @@
     "patches/*"
   ],
   "scripts": {
-    "build": "babel --keep-file-extension --out-dir dist *.mjs",
-    "dev": "babel --keep-file-extension --watch --out-dir dist *.mjs",
+    "build": "babel --keep-file-extension --out-dir dist src",
+    "dev": "babel --keep-file-extension --watch --out-dir dist src",
     "postinstall": "patch-package"
   },
   "prettier": {
