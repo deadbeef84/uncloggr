@@ -51,7 +51,7 @@ const { values: opts, positionals: argv } = parseArgs({
 })
 
 if (opts.version) {
-  const pkg = JSON.parse((fs.readFileSync(new URL('./package.json', import.meta.url))))
+  const pkg = JSON.parse((fs.readFileSync(new URL('../package.json', import.meta.url))))
   console.log(`uncloggr version: ${pkg.version}`)
   process.exit(0)
 }
