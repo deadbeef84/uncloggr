@@ -163,6 +163,62 @@ const ttyfd = fs.openSync('/dev/tty', 'r')
 const input = tty.ReadStream(ttyfd)
 input.setRawMode(true).setEncoding('utf8')
 
+const SHORTCUTS = [
+  { key: 'j / ↓', desc: 'Move down one line' },
+  { key: 'k / ↑', desc: 'Move up one line' },
+  { key: 'Ctrl+d / PgDn', desc: 'Move down half page' },
+  { key: 'Ctrl+u / PgUp', desc: 'Move up half page' },
+  { key: 'h / ←', desc: 'Select previous field' },
+  { key: 'l / →', desc: 'Select next field' },
+  { key: 'g', desc: 'Go to first line' },
+  { key: 'G', desc: 'Go to last line' },
+  { key: 'F', desc: 'Follow mode (jump to end)' },
+  { key: '1-6', desc: 'Filter by log level (1=TRACE to 6=FATAL)' },
+  { key: '+', desc: 'Include: filter to entries where field equals current value' },
+  { key: '-', desc: 'Exclude: filter out entries where field equals current value' },
+  { key: '&', desc: 'Add custom text filter' },
+  { key: '=', desc: 'Add custom expression filter (JavaScript eval)' },
+  { key: 'Backspace', desc: 'Remove last filter' },
+  { key: 'Meta+Backspace', desc: 'Clear all filters' },
+  { key: '/', desc: 'Search forward' },
+  { key: 'n', desc: 'Next search result' },
+  { key: 'N', desc: 'Previous search result' },
+  { key: 'Space', desc: 'Toggle selection on current line' },
+  { key: 'm', desc: 'Jump to next selected line' },
+  { key: 'M', desc: 'Jump to previous selected line' },
+  { key: 's', desc: 'Sort messages by timestamp' },
+  { key: '*', desc: 'Add new field to display' },
+  { key: '\\', desc: 'Remove selected field from display' },
+  { key: 'Enter', desc: 'Toggle detailed inspection view' },
+  { key: 'c', desc: 'Clear all messages' },
+  { key: 'q', desc: 'Quit application' },
+  { key: '?', desc: 'Show this help popup' },
+]
+
+function HelpPopup() {
+  return (
+    <Box
+      flexDirection='column'
+      borderStyle='round'
+      borderColor='cyan'
+      padding={1}
+      marginX={2}
+      marginY={1}
+    >
+      <Text bold>Keyboard Shortcuts (Press any key to close)</Text>
+      <Text></Text>
+      {SHORTCUTS.map((shortcut, idx) => (
+        <Box key={idx} gap={2}>
+          <Box width={16} flexShrink={0}>
+            <Text bold color='yellow'>{shortcut.key}</Text>
+          </Box>
+          <Text>{shortcut.desc}</Text>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 function Main(props) {
   const {
     rows,
@@ -185,6 +241,7 @@ function Main(props) {
   const [prompt, setPrompt] = React.useState(null)
   const [query, setQuery] = React.useState('')
   const [search, setSearch] = React.useState(null)
+  const [showHelp, setShowHelp] = React.useState(false)
 
   const ref = React.useRef()
   const [numLines, setNumLines] = React.useState(0)
@@ -227,6 +284,11 @@ function Main(props) {
       const searchFn = (msg) => JSON.stringify(msg).includes(query)
       const idx = matching.find((x, idx) => idx > pos && searchFn(messages[x]))
       setItem(idx !== undefined ? messages[idx] : undefined)
+    }
+
+    if (showHelp) {
+      setShowHelp(false)
+      return
     }
 
     if (prompt) {
@@ -423,6 +485,9 @@ function Main(props) {
       case 'q': {
         exit()
       }
+      case '?': {
+        setShowHelp(!showHelp)
+      }
     }
   })
 
@@ -553,7 +618,9 @@ function Main(props) {
       >
         {formatObject(rest, { lineWidth: columns - 4 })}
       </ScrollBox>
-      {prompt ? (
+      {showHelp ? (
+        <HelpPopup />
+      ) : prompt ? (
         <Box>
           <Text>{prompt.label}: </Text>
           <TextInput
