@@ -116,7 +116,9 @@ uncloggr --all --tail 100 docker:
 - `q` - Quit
 
 ### In Inspection View
-- `↑` or `↓` - Scroll inspection pane
+- `↑` or `↓` - Scroll inspection pane one line
+- `Ctrl+d` or `PageDown` - Scroll inspection pane down half page
+- `Ctrl+u` or `PageUp` - Scroll inspection pane up half page
 - `Enter` or `Esc` - Exit inspection view
 
 ## Log Format
