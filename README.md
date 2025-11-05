@@ -81,7 +81,15 @@ You would think `node index.js | uncloggr` would work, and sometimes it does, bu
 node index.js </dev/null 2>&1 | uncloggr
 ```
 
-This will also make sure stderr is sent to uncloggr. It can also be combined with `node --watch`.
+This will also make sure stderr is sent to uncloggr. It can also be combined with `node --watch`. You can add the following to .bashrc to make it easier to type:
+
+```bash
+upipe() {
+  "@$" </dev/null 2>&1 | uncloggr
+}
+```
+
+Now you can type `upipe node --watch index.js` instead.
 
 ### Reading Docker Logs Over SSH
 
@@ -89,13 +97,13 @@ If you often run this on remote servers using ssh, you can either install and ru
 
 When running it locally, it may take longer to load the log contents, but the user-interface will be less laggy.
 
-```
+```bash
 DOCKER_HOST=ssh://root@myhost.com uncloggr <args>
 ```
 
 To avoid typing this long command, you can add the following to your .bashrc (or similar):
 
-```
+```bash
 u() {
   local host="$1"
   shift
