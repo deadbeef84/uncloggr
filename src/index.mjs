@@ -849,7 +849,10 @@ process.exit(0)
 
 function parseLine(row) {
   try {
-    if (row) return JSON.parse(row)
+    if (!row || row[0] !== '{') {
+      return { msg: row, level: 100 }
+    }
+    return JSON.parse(row)
   } catch (err) {
     return { msg: row, level: 100 }
   }
