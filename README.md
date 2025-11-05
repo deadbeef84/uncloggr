@@ -73,6 +73,32 @@ tail -f /var/log/app.log | uncloggr
 uncloggr --all --tail 100 docker:
 ```
 
+### Reading Docker Logs Over SSH
+
+If you often run this on remote servers using ssh, you can either install and run it on the remote host, or you can use `DOCKER_HOST` environment variable and run it locally.
+
+When running it locally, it may take longer to load the log contents, but the user-interface will be less laggy.
+
+```
+DOCKER_HOST=ssh://root@myhost.com uncloggr <args>
+```
+
+To avoid typing this long command, you can add the following to your .bashrc (or similar):
+
+```
+u() {
+  local host="$1"
+  shift
+  DOCKER_HOST="ssh://${host}" uncloggr "$@"
+}
+```
+
+And you can now type `u root@myhost.com <args>` instead.
+
+### Docker Service Logs
+
+When using the `docker-service:` source, `docker service logs` is used to read logs. This is [sometimes buggy](https://github.com/moby/moby/issues/33183), causing it show incomplete logs. This is also why docker services are not suggested by default unless you specify `docker-service:`.
+
 ## Keyboard Shortcuts
 
 ### Navigation
@@ -121,7 +147,7 @@ uncloggr --all --tail 100 docker:
 
 ## Log Format
 
-uncloggr works best with JSON-formatted logs. Each log entry should be a JSON object on a single line. Common fields:
+uncloggr works best with JSON-formatted logs, and is expected to be used with [pino](https://getpino.io/#/)/[bunyan](https://www.npmjs.com/package/bunyan). Each log entry should be a JSON object on a single line. Common fields:
 
 - `time` - Timestamp (ISO 8601 format)
 - `level` - Numeric log level (10=TRACE, 20=DEBUG, 30=INFO, 40=WARN, 50=ERROR, 60=FATAL)
