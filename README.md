@@ -142,7 +142,10 @@ When using the `docker-service:` source, `docker service logs` is used to read l
 - `q` - Quit
 
 ### In Inspection View
-- `↑` or `↓` - Scroll inspection pane
+- `↑` or `↓` - Scroll inspection pane one line
+- `shift+↑` or `shift+↓` - Next/previous log item when in inspector view
+- `Ctrl+d` or `PageDown` - Scroll inspection pane down half page
+- `Ctrl+u` or `PageUp` - Scroll inspection pane up half page
 - `Enter` or `Esc` - Exit inspection view
 
 ## Log Format

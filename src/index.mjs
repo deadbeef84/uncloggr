@@ -190,6 +190,7 @@ const SHORTCUTS = [
   { key: '*', desc: 'Add new field to display' },
   { key: '\\', desc: 'Remove selected field from display' },
   { key: 'Enter', desc: 'Toggle detailed inspection view' },
+  { key: 'Shift+↓ / Shift+↑', desc: 'Next/previous log item when in inspector view' },
   { key: 'c', desc: 'Clear all messages' },
   { key: 'q', desc: 'Quit application' },
   { key: '?', desc: 'Show this help popup' },
@@ -301,6 +302,10 @@ function Main(props) {
     if (inspect) {
       if (key.escape || key.return) {
         setInspect(false)
+      } else if (key.shift && key.upArrow) {
+        move(-1)
+      } else if (key.shift && key.downArrow) {
+        move(1)
       }
       return
     }
