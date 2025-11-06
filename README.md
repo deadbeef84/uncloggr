@@ -73,19 +73,37 @@ tail -f /var/log/app.log | uncloggr
 uncloggr --all --tail 100 docker:
 ```
 
+### Piping From Node
+
+You would think `node index.js | uncloggr` would work, and sometimes it does, but [unfortunately node.js messes with terminal state](https://github.com/nodejs/node/issues/41143) when it exits, leaving uncloggr in a broken state. You can work around this by making sure neither of stdin/stdout/stderr is a tty. You can do this using the following:
+
+```
+node index.js </dev/null 2>&1 | uncloggr
+```
+
+This will also make sure stderr is sent to uncloggr. It can also be combined with `node --watch`. You can add the following to .bashrc to make it easier to type:
+
+```bash
+upipe() {
+  "@$" </dev/null 2>&1 | uncloggr
+}
+```
+
+Now you can type `upipe node --watch index.js` instead.
+
 ### Reading Docker Logs Over SSH
 
 If you often run this on remote servers using ssh, you can either install and run it on the remote host, or you can use `DOCKER_HOST` environment variable and run it locally.
 
 When running it locally, it may take longer to load the log contents, but the user-interface will be less laggy.
 
-```
+```bash
 DOCKER_HOST=ssh://root@myhost.com uncloggr <args>
 ```
 
 To avoid typing this long command, you can add the following to your .bashrc (or similar):
 
-```
+```bash
 u() {
   local host="$1"
   shift

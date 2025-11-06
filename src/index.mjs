@@ -665,7 +665,7 @@ function ScrollBox({ focus, children, ...props }) {
   const contentHeight = lines.length
   const [scroll, setScroll] = React.useState(0)
 
-  useInput((_, key) => {
+  useInput((input, key) => {
     if (!focus) {
       return
     }
@@ -673,6 +673,10 @@ function ScrollBox({ focus, children, ...props }) {
       setScroll((x) => Math.max(x - 1, 0))
     } else if (key.downArrow) {
       setScroll((x) => Math.min(x + 1, Math.max(0, contentHeight - boxHeight)))
+    } else if (key.pageUp || (key.ctrl && input === 'u')) {
+      setScroll((x) => Math.max(x - Math.floor(boxHeight / 2), 0))
+    } else if (key.pageDown || (key.ctrl && input === 'd')) {
+      setScroll((x) => Math.min(x + Math.floor(boxHeight / 2), Math.max(0, contentHeight - boxHeight)))
     }
   })
 
