@@ -85,7 +85,7 @@ This will also make sure stderr is sent to uncloggr. It can also be combined wit
 
 ```bash
 upipe() {
-  "@$" </dev/null 2>&1 | uncloggr
+  "$@" </dev/null 2>&1 | uncloggr
 }
 ```
 
