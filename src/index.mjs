@@ -9,11 +9,10 @@ import { formatLevel, formatNumber, formatObject, formatTime } from './format.mj
 import { render, Text, Box, Spacer, useApp, useInput, measureElement } from 'ink'
 import fp from 'lodash/fp.js'
 import TextInput from 'ink-text-input'
-import inquirer from 'inquirer'
+import checkboxPlus from 'inquirer-checkbox-plus-plus'
+import { matchSorter } from 'match-sorter'
 import { parseArgs } from 'node:util'
 import { getDocker, getDockerServices, getFile, getPM2, getStdin } from './sources.mjs'
-
-const prompt = async (question) => (await inquirer.prompt([{ ...question, name: 'answer' }])).answer
 
 const { values: opts, positionals: argv } = parseArgs({
   options: {
@@ -109,11 +108,17 @@ for (const source of sources) {
     let choice
     while (!choice?.length) {
       try {
-        choice = await prompt({
-          type: 'checkbox',
+        choice = await checkboxPlus({
           message: 'From where?',
-          choices: from.sort((a, b) => a.name.localeCompare(b.name)),
-          validate: (answers) => answers.length ? true : 'You must select a source',
+          searchable: true,
+          highlight: true,
+          pageSize: 10,
+          required: true,
+          source: async (_answers, input) => {
+            const term = input?.trim() ?? ''
+            const items = term ? matchSorter(from, term, { keys: ['name'] }) : from
+            return items.map((item) => ({ name: item.name, value: item.value }))
+          },
         })
       } catch {
         process.exit(1)
