@@ -22,9 +22,9 @@
     "trailingComma": "es5"
   },
   "dependencies": {
-    "ink": "^6.3.1",
+    "ink": "^6.5.0",
     "ink-text-input": "^6.0.0",
-    "inquirer": "^12.9.6",
+    "inquirer": "^12.11.1",
     "inquirer-checkbox-plus-plus": "^1.1.1",
     "lodash": "^4.17.21",
     "match-sorter": "^8.1.0",
@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@babel/cli": "^7.28.3",
-    "@babel/core": "^7.28.4",
-    "@babel/preset-react": "^7.27.1"
+    "@babel/core": "^7.28.5",
+    "@babel/preset-react": "^7.28.5"
   }
 }
